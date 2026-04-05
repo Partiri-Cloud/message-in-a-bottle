@@ -18,7 +18,7 @@ type Handlers struct {
 	Admin        *AdminHandler
 }
 
-func RegisterRoutes(router *gin.Engine, h *Handlers, envRepo *repository.EnvironmentRepository, adminSecret string) {
+func RegisterRoutes(router *gin.Engine, h *Handlers, envRepo *repository.EnvironmentRepository, adminSecret, subscriberHMACSecret string) {
 	// Admin routes (protected by admin secret, no API key required)
 	admin := router.Group("/admin")
 	admin.Use(middleware.AdminSecretAuth(adminSecret))
@@ -31,7 +31,7 @@ func RegisterRoutes(router *gin.Engine, h *Handlers, envRepo *repository.Environ
 	api := router.Group("/api/v1")
 	api.Use(middleware.AuthMiddleware(envRepo))
 
-	// Subscribers
+	// Subscribers (server-only CRUD — no subscriber token required)
 	sub := api.Group("/subscribers")
 	{
 		sub.POST("", middleware.RequirePermission("subscribers:write"), h.Subscriber.Create)
@@ -39,19 +39,26 @@ func RegisterRoutes(router *gin.Engine, h *Handlers, envRepo *repository.Environ
 		sub.GET("/:subscriberId", middleware.RequirePermission("subscribers:read"), h.Subscriber.Get)
 		sub.PATCH("/:subscriberId", middleware.RequirePermission("subscribers:write"), h.Subscriber.Update)
 		sub.DELETE("/:subscriberId", middleware.RequirePermission("subscribers:write"), h.Subscriber.Delete)
+	}
 
+	// Subscriber-scoped routes (require X-Subscriber-Token HMAC validation)
+	scoped := sub.Group("")
+	if subscriberHMACSecret != "" {
+		scoped.Use(middleware.SubscriberScope(subscriberHMACSecret))
+	}
+	{
 		// Subscriber preferences
-		sub.GET("/:subscriberId/preferences", middleware.RequirePermission("preferences:read"), h.Preference.GetAll)
-		sub.PATCH("/:subscriberId/preferences", middleware.RequirePermission("preferences:write"), h.Preference.UpdateGlobal)
-		sub.PATCH("/:subscriberId/preferences/:workflowId", middleware.RequirePermission("preferences:write"), h.Preference.UpdateWorkflow)
+		scoped.GET("/:subscriberId/preferences", middleware.RequirePermission("preferences:read"), h.Preference.GetAll)
+		scoped.PATCH("/:subscriberId/preferences", middleware.RequirePermission("preferences:write"), h.Preference.UpdateGlobal)
+		scoped.PATCH("/:subscriberId/preferences/:workflowId", middleware.RequirePermission("preferences:write"), h.Preference.UpdateWorkflow)
 
 		// Subscriber feed
-		sub.GET("/:subscriberId/feed", middleware.RequirePermission("notifications:read"), h.Notification.Feed)
-		sub.GET("/:subscriberId/feed/unseen-count", middleware.RequirePermission("notifications:read"), h.Notification.UnseenCount)
-		sub.POST("/:subscriberId/feed/:notifId/seen", middleware.RequirePermission("notifications:read"), h.Notification.MarkSeen)
-		sub.POST("/:subscriberId/feed/:notifId/read", middleware.RequirePermission("notifications:read"), h.Notification.MarkRead)
-		sub.POST("/:subscriberId/feed/:notifId/archive", middleware.RequirePermission("notifications:read"), h.Notification.Archive)
-		sub.POST("/:subscriberId/feed/bulk-action", middleware.RequirePermission("notifications:read"), h.Notification.BulkAction)
+		scoped.GET("/:subscriberId/feed", middleware.RequirePermission("notifications:read"), h.Notification.Feed)
+		scoped.GET("/:subscriberId/feed/unseen-count", middleware.RequirePermission("notifications:read"), h.Notification.UnseenCount)
+		scoped.POST("/:subscriberId/feed/:notifId/seen", middleware.RequirePermission("notifications:read"), h.Notification.MarkSeen)
+		scoped.POST("/:subscriberId/feed/:notifId/read", middleware.RequirePermission("notifications:read"), h.Notification.MarkRead)
+		scoped.POST("/:subscriberId/feed/:notifId/archive", middleware.RequirePermission("notifications:read"), h.Notification.Archive)
+		scoped.POST("/:subscriberId/feed/bulk-action", middleware.RequirePermission("notifications:read"), h.Notification.BulkAction)
 	}
 
 	// Topics

@@ -75,10 +75,10 @@ func TestNotificationRepo_MarkSeen(t *testing.T) {
 	}
 	require.NoError(t, repo.Create(context.Background(), notif))
 
-	err := repo.MarkSeen(context.Background(), notif.ID)
+	err := repo.MarkSeen(context.Background(), notif.ID, envID, subID)
 	require.NoError(t, err)
 
-	found, _ := repo.FindByID(context.Background(), notif.ID)
+	found, _ := repo.FindByID(context.Background(), notif.ID, envID)
 	assert.True(t, found.Seen)
 	assert.NotNil(t, found.SeenAt)
 }
@@ -100,10 +100,10 @@ func TestNotificationRepo_MarkRead(t *testing.T) {
 	}
 	require.NoError(t, repo.Create(context.Background(), notif))
 
-	err := repo.MarkRead(context.Background(), notif.ID)
+	err := repo.MarkRead(context.Background(), notif.ID, envID, subID)
 	require.NoError(t, err)
 
-	found, _ := repo.FindByID(context.Background(), notif.ID)
+	found, _ := repo.FindByID(context.Background(), notif.ID, envID)
 	assert.True(t, found.Read)
 	assert.True(t, found.Seen)
 	assert.NotNil(t, found.ReadAt)
@@ -135,8 +135,8 @@ func TestNotificationRepo_UnseenCount(t *testing.T) {
 
 	// Mark 2 as seen
 	notifs, _, _ := repo.FindFeed(context.Background(), envID, subID, FeedFilter{}, 1, 10)
-	repo.MarkSeen(context.Background(), notifs[0].ID)
-	repo.MarkSeen(context.Background(), notifs[1].ID)
+	repo.MarkSeen(context.Background(), notifs[0].ID, envID, subID)
+	repo.MarkSeen(context.Background(), notifs[1].ID, envID, subID)
 
 	count, _ = repo.UnseenCount(context.Background(), envID, subID)
 	assert.Equal(t, int64(3), count)
@@ -163,7 +163,7 @@ func TestNotificationRepo_FindFeed_FilterBySeen(t *testing.T) {
 	}
 
 	all, _, _ := repo.FindFeed(context.Background(), envID, subID, FeedFilter{}, 1, 10)
-	repo.MarkSeen(context.Background(), all[0].ID)
+	repo.MarkSeen(context.Background(), all[0].ID, envID, subID)
 
 	f := false
 	unseen, total, err := repo.FindFeed(context.Background(), envID, subID, FeedFilter{Seen: &f}, 1, 10)
@@ -194,13 +194,13 @@ func TestNotificationRepo_BulkMarkRead(t *testing.T) {
 		ids = append(ids, notif.ID)
 	}
 
-	err := repo.BulkMarkRead(context.Background(), ids[:2])
+	err := repo.BulkMarkRead(context.Background(), ids[:2], envID, subID)
 	require.NoError(t, err)
 
 	for _, id := range ids[:2] {
-		n, _ := repo.FindByID(context.Background(), id)
+		n, _ := repo.FindByID(context.Background(), id, envID)
 		assert.True(t, n.Read)
 	}
-	n, _ := repo.FindByID(context.Background(), ids[2])
+	n, _ := repo.FindByID(context.Background(), ids[2], envID)
 	assert.False(t, n.Read)
 }

@@ -108,7 +108,7 @@ func main() {
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
-	handler.RegisterRoutes(router, handlers, envRepo, cfg.AdminSecret)
+	handler.RegisterRoutes(router, handlers, envRepo, cfg.AdminSecret, cfg.SubscriberHMACSecret)
 
 	_ = rdb
 

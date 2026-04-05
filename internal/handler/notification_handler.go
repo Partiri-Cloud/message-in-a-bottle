@@ -38,13 +38,14 @@ func (h *NotificationHandler) List(c *gin.Context) {
 }
 
 func (h *NotificationHandler) Get(c *gin.Context) {
+	envID := middleware.GetEnvironmentID(c)
 	id, err := bson.ObjectIDFromHex(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "VALIDATION_ERROR", "message": "invalid notification ID"}})
 		return
 	}
 
-	notif, err := h.notifRepo.FindByID(c.Request.Context(), id)
+	notif, err := h.notifRepo.FindByID(c.Request.Context(), id, envID)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "notification not found"}})
@@ -58,6 +59,9 @@ func (h *NotificationHandler) Get(c *gin.Context) {
 }
 
 func (h *NotificationHandler) Feed(c *gin.Context) {
+	if !middleware.EnforceSubscriberScope(c) {
+		return
+	}
 	envID := middleware.GetEnvironmentID(c)
 	subscriberID := c.Param("subscriberId")
 	page, limit := dto.ParsePagination(c)
@@ -101,13 +105,29 @@ func (h *NotificationHandler) Feed(c *gin.Context) {
 }
 
 func (h *NotificationHandler) MarkSeen(c *gin.Context) {
+	if !middleware.EnforceSubscriberScope(c) {
+		return
+	}
+	envID := middleware.GetEnvironmentID(c)
+	subscriberID := c.Param("subscriberId")
+
+	sub, err := h.subRepo.FindBySubscriberID(c.Request.Context(), envID, subscriberID)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "subscriber not found"}})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		return
+	}
+
 	notifID, err := bson.ObjectIDFromHex(c.Param("notifId"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "VALIDATION_ERROR", "message": "invalid notification ID"}})
 		return
 	}
 
-	if err := h.notifRepo.MarkSeen(c.Request.Context(), notifID); err != nil {
+	if err := h.notifRepo.MarkSeen(c.Request.Context(), notifID, envID, sub.ID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
 		return
 	}
@@ -116,13 +136,29 @@ func (h *NotificationHandler) MarkSeen(c *gin.Context) {
 }
 
 func (h *NotificationHandler) MarkRead(c *gin.Context) {
+	if !middleware.EnforceSubscriberScope(c) {
+		return
+	}
+	envID := middleware.GetEnvironmentID(c)
+	subscriberID := c.Param("subscriberId")
+
+	sub, err := h.subRepo.FindBySubscriberID(c.Request.Context(), envID, subscriberID)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "subscriber not found"}})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		return
+	}
+
 	notifID, err := bson.ObjectIDFromHex(c.Param("notifId"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "VALIDATION_ERROR", "message": "invalid notification ID"}})
 		return
 	}
 
-	if err := h.notifRepo.MarkRead(c.Request.Context(), notifID); err != nil {
+	if err := h.notifRepo.MarkRead(c.Request.Context(), notifID, envID, sub.ID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
 		return
 	}
@@ -131,13 +167,29 @@ func (h *NotificationHandler) MarkRead(c *gin.Context) {
 }
 
 func (h *NotificationHandler) Archive(c *gin.Context) {
+	if !middleware.EnforceSubscriberScope(c) {
+		return
+	}
+	envID := middleware.GetEnvironmentID(c)
+	subscriberID := c.Param("subscriberId")
+
+	sub, err := h.subRepo.FindBySubscriberID(c.Request.Context(), envID, subscriberID)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "subscriber not found"}})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		return
+	}
+
 	notifID, err := bson.ObjectIDFromHex(c.Param("notifId"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "VALIDATION_ERROR", "message": "invalid notification ID"}})
 		return
 	}
 
-	if err := h.notifRepo.MarkArchived(c.Request.Context(), notifID); err != nil {
+	if err := h.notifRepo.MarkArchived(c.Request.Context(), notifID, envID, sub.ID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
 		return
 	}
@@ -146,6 +198,22 @@ func (h *NotificationHandler) Archive(c *gin.Context) {
 }
 
 func (h *NotificationHandler) BulkAction(c *gin.Context) {
+	if !middleware.EnforceSubscriberScope(c) {
+		return
+	}
+	envID := middleware.GetEnvironmentID(c)
+	subscriberID := c.Param("subscriberId")
+
+	sub, err := h.subRepo.FindBySubscriberID(c.Request.Context(), envID, subscriberID)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "subscriber not found"}})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		return
+	}
+
 	var req dto.BulkActionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "VALIDATION_ERROR", "message": err.Error()}})
@@ -164,9 +232,9 @@ func (h *NotificationHandler) BulkAction(c *gin.Context) {
 	var bulkErr error
 	switch req.Action {
 	case "read":
-		bulkErr = h.notifRepo.BulkMarkRead(c.Request.Context(), ids)
+		bulkErr = h.notifRepo.BulkMarkRead(c.Request.Context(), ids, envID, sub.ID)
 	case "seen":
-		bulkErr = h.notifRepo.BulkMarkSeen(c.Request.Context(), ids)
+		bulkErr = h.notifRepo.BulkMarkSeen(c.Request.Context(), ids, envID, sub.ID)
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "VALIDATION_ERROR", "message": "action must be 'read' or 'seen'"}})
 		return
@@ -197,6 +265,9 @@ func (h *NotificationHandler) Activity(c *gin.Context) {
 }
 
 func (h *NotificationHandler) UnseenCount(c *gin.Context) {
+	if !middleware.EnforceSubscriberScope(c) {
+		return
+	}
 	envID := middleware.GetEnvironmentID(c)
 	subscriberID := c.Param("subscriberId")
 

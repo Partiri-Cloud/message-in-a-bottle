@@ -22,6 +22,9 @@ func NewPreferenceHandler(prefRepo *repository.PreferenceRepository, subRepo *re
 }
 
 func (h *PreferenceHandler) GetAll(c *gin.Context) {
+	if !middleware.EnforceSubscriberScope(c) {
+		return
+	}
 	envID := middleware.GetEnvironmentID(c)
 	subscriberID := c.Param("subscriberId")
 
@@ -45,6 +48,9 @@ func (h *PreferenceHandler) GetAll(c *gin.Context) {
 }
 
 func (h *PreferenceHandler) UpdateGlobal(c *gin.Context) {
+	if !middleware.EnforceSubscriberScope(c) {
+		return
+	}
 	var req dto.UpdatePreferenceRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "VALIDATION_ERROR", "message": err.Error()}})
@@ -87,6 +93,9 @@ func (h *PreferenceHandler) UpdateGlobal(c *gin.Context) {
 }
 
 func (h *PreferenceHandler) UpdateWorkflow(c *gin.Context) {
+	if !middleware.EnforceSubscriberScope(c) {
+		return
+	}
 	var req dto.UpdatePreferenceRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "VALIDATION_ERROR", "message": err.Error()}})

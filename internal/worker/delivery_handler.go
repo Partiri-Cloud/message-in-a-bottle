@@ -80,7 +80,7 @@ func (h *DeliveryHandler) ProcessTask(ctx context.Context, t *asynq.Task) error 
 	}
 
 	// Load notification
-	notif, err := h.notifRepo.FindByID(ctx, notifID)
+	notif, err := h.notifRepo.FindByID(ctx, notifID, envID)
 	if err != nil {
 		return fmt.Errorf("find notification: %w", err)
 	}

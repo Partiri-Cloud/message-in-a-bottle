@@ -30,9 +30,9 @@ func (r *NotificationRepository) Create(ctx context.Context, notif *model.Notifi
 	return nil
 }
 
-func (r *NotificationRepository) FindByID(ctx context.Context, id bson.ObjectID) (*model.Notification, error) {
+func (r *NotificationRepository) FindByID(ctx context.Context, id, envID bson.ObjectID) (*model.Notification, error) {
 	var notif model.Notification
-	err := r.col.FindOne(ctx, bson.M{"_id": id}).Decode(&notif)
+	err := r.col.FindOne(ctx, bson.M{"_id": id, "environmentId": envID}).Decode(&notif)
 	if err != nil {
 		return nil, err
 	}
@@ -117,46 +117,46 @@ func (r *NotificationRepository) FindMany(ctx context.Context, envID bson.Object
 	return notifs, total, nil
 }
 
-func (r *NotificationRepository) MarkSeen(ctx context.Context, id bson.ObjectID) error {
+func (r *NotificationRepository) MarkSeen(ctx context.Context, id, envID, subscriberID bson.ObjectID) error {
 	now := time.Now()
 	_, err := r.col.UpdateOne(ctx,
-		bson.M{"_id": id, "seen": false},
+		bson.M{"_id": id, "environmentId": envID, "subscriberId": subscriberID, "seen": false},
 		bson.M{"$set": bson.M{"seen": true, "seenAt": now, "updatedAt": now}},
 	)
 	return err
 }
 
-func (r *NotificationRepository) MarkRead(ctx context.Context, id bson.ObjectID) error {
+func (r *NotificationRepository) MarkRead(ctx context.Context, id, envID, subscriberID bson.ObjectID) error {
 	now := time.Now()
 	_, err := r.col.UpdateOne(ctx,
-		bson.M{"_id": id, "read": false},
+		bson.M{"_id": id, "environmentId": envID, "subscriberId": subscriberID, "read": false},
 		bson.M{"$set": bson.M{"read": true, "readAt": now, "seen": true, "seenAt": now, "updatedAt": now}},
 	)
 	return err
 }
 
-func (r *NotificationRepository) MarkArchived(ctx context.Context, id bson.ObjectID) error {
+func (r *NotificationRepository) MarkArchived(ctx context.Context, id, envID, subscriberID bson.ObjectID) error {
 	now := time.Now()
 	_, err := r.col.UpdateOne(ctx,
-		bson.M{"_id": id},
+		bson.M{"_id": id, "environmentId": envID, "subscriberId": subscriberID},
 		bson.M{"$set": bson.M{"archivedAt": now, "updatedAt": now}},
 	)
 	return err
 }
 
-func (r *NotificationRepository) BulkMarkRead(ctx context.Context, ids []bson.ObjectID) error {
+func (r *NotificationRepository) BulkMarkRead(ctx context.Context, ids []bson.ObjectID, envID, subscriberID bson.ObjectID) error {
 	now := time.Now()
 	_, err := r.col.UpdateMany(ctx,
-		bson.M{"_id": bson.M{"$in": ids}},
+		bson.M{"_id": bson.M{"$in": ids}, "environmentId": envID, "subscriberId": subscriberID},
 		bson.M{"$set": bson.M{"read": true, "readAt": now, "seen": true, "seenAt": now, "updatedAt": now}},
 	)
 	return err
 }
 
-func (r *NotificationRepository) BulkMarkSeen(ctx context.Context, ids []bson.ObjectID) error {
+func (r *NotificationRepository) BulkMarkSeen(ctx context.Context, ids []bson.ObjectID, envID, subscriberID bson.ObjectID) error {
 	now := time.Now()
 	_, err := r.col.UpdateMany(ctx,
-		bson.M{"_id": bson.M{"$in": ids}},
+		bson.M{"_id": bson.M{"$in": ids}, "environmentId": envID, "subscriberId": subscriberID},
 		bson.M{"$set": bson.M{"seen": true, "seenAt": now, "updatedAt": now}},
 	)
 	return err

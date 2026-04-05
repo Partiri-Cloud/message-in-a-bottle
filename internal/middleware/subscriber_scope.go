@@ -90,6 +90,29 @@ func SubscriberScope(hmacSecret string) gin.HandlerFunc {
 }
 
 func GetScopedSubscriberID(c *gin.Context) string {
-	v, _ := c.Get(ContextKeySubscriberID)
+	v, exists := c.Get(ContextKeySubscriberID)
+	if !exists {
+		return ""
+	}
 	return v.(string)
+}
+
+// EnforceSubscriberScope checks that the scoped subscriber ID from the HMAC token
+// matches the :subscriberId URL parameter. Returns true if the request should continue.
+// If the scoped ID is empty (middleware not applied), it allows the request through
+// so that server-side API keys without subscriber tokens still work.
+func EnforceSubscriberScope(c *gin.Context) bool {
+	scopedID := GetScopedSubscriberID(c)
+	if scopedID == "" {
+		return true
+	}
+	requestedID := c.Param("subscriberId")
+	if scopedID != requestedID {
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": gin.H{
+			"code":    "FORBIDDEN",
+			"message": "subscriber token does not match requested subscriber",
+		}})
+		return false
+	}
+	return true
 }
