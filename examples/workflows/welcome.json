@@ -1,0 +1,62 @@
+{
+  "identifier": "welcome",
+  "name": "Welcome Onboarding",
+  "description": "Sends a welcome email and in-app notification to new users.",
+  "tags": ["onboarding"],
+  "steps": [
+    {
+      "type": "email",
+      "order": 1,
+      "defaultEnabled": true,
+      "template": {
+        "subject": {
+          "en": "Welcome to {{.Payload.appName}}, {{.Subscriber.FirstName}}!",
+          "fr": "Bienvenue sur {{.Payload.appName}}, {{.Subscriber.FirstName}} !",
+          "pt": "Bem-vindo ao {{.Payload.appName}}, {{.Subscriber.FirstName}}!",
+          "de": "Willkommen bei {{.Payload.appName}}, {{.Subscriber.FirstName}}!",
+          "it": "Benvenuto su {{.Payload.appName}}, {{.Subscriber.FirstName}}!",
+          "es": "Bienvenido a {{.Payload.appName}}, {{.Subscriber.FirstName}}!"
+        },
+        "body": {
+          "en": "<h1>Welcome, {{.Subscriber.FirstName}}!</h1><p>Thanks for joining {{.Payload.appName}}. We're glad to have you.</p><p>Get started by visiting your <a href=\"{{.Payload.dashboardUrl}}\">dashboard</a>.</p>",
+          "fr": "<h1>Bienvenue, {{.Subscriber.FirstName}} !</h1><p>Merci d'avoir rejoint {{.Payload.appName}}.</p><p>Commencez en visitant votre <a href=\"{{.Payload.dashboardUrl}}\">tableau de bord</a>.</p>",
+          "pt": "<h1>Bem-vindo, {{.Subscriber.FirstName}}!</h1><p>Obrigado por se juntar ao {{.Payload.appName}}.</p><p>Comece visitando o seu <a href=\"{{.Payload.dashboardUrl}}\">painel</a>.</p>",
+          "de": "<h1>Willkommen, {{.Subscriber.FirstName}}!</h1><p>Danke, dass Sie sich bei {{.Payload.appName}} angemeldet haben.</p><p>Besuchen Sie Ihr <a href=\"{{.Payload.dashboardUrl}}\">Dashboard</a>, um loszulegen.</p>",
+          "it": "<h1>Benvenuto, {{.Subscriber.FirstName}}!</h1><p>Grazie per esserti unito a {{.Payload.appName}}.</p><p>Inizia visitando la tua <a href=\"{{.Payload.dashboardUrl}}\">dashboard</a>.</p>",
+          "es": "<h1>Bienvenido, {{.Subscriber.FirstName}}!</h1><p>Gracias por unirte a {{.Payload.appName}}.</p><p>Comienza visitando tu <a href=\"{{.Payload.dashboardUrl}}\">panel</a>.</p>"
+        }
+      }
+    },
+    {
+      "type": "in_app",
+      "order": 2,
+      "defaultEnabled": true,
+      "template": {
+        "subject": {
+          "en": "Welcome!",
+          "fr": "Bienvenue !",
+          "pt": "Bem-vindo!",
+          "de": "Willkommen!",
+          "it": "Benvenuto!",
+          "es": "Bienvenido!"
+        },
+        "content": {
+          "en": "Welcome to {{.Payload.appName}}, {{.Subscriber.FirstName}}. Explore your dashboard to get started.",
+          "fr": "Bienvenue sur {{.Payload.appName}}, {{.Subscriber.FirstName}}. Explorez votre tableau de bord pour commencer.",
+          "pt": "Bem-vindo ao {{.Payload.appName}}, {{.Subscriber.FirstName}}. Explore o painel para começar.",
+          "de": "Willkommen bei {{.Payload.appName}}, {{.Subscriber.FirstName}}. Erkunden Sie Ihr Dashboard.",
+          "it": "Benvenuto su {{.Payload.appName}}, {{.Subscriber.FirstName}}. Esplora la dashboard per iniziare.",
+          "es": "Bienvenido a {{.Payload.appName}}, {{.Subscriber.FirstName}}. Explora tu panel para empezar."
+        }
+      }
+    }
+  ],
+  "preferenceDefaults": {
+    "email": true,
+    "inApp": true,
+    "sms": false,
+    "push": false,
+    "slack": false,
+    "msTeams": false
+  }
+}

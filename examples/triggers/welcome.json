@@ -1,0 +1,10 @@
+{
+  "workflowIdentifier": "welcome",
+  "to": [
+    { "subscriberId": "user-123" }
+  ],
+  "payload": {
+    "appName": "Acme App",
+    "dashboardUrl": "https://app.acme.com/dashboard"
+  }
+}

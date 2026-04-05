@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch",
+      "Read",
+      "Edit",
+      "Write",
+      "Glob",
+      "Grep"
+    ],
+    "deny": [
+      "Bash(cd ~*)",
+      "Bash(cd /home*)",
+      "Bash(cat /home*)",
+      "Bash(ls /home*)"
+    ]
+  }
+}

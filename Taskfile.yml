@@ -1,0 +1,144 @@
+version: "3"
+
+vars:
+  IMAGE_NAME: '{{.IMAGE_NAME | default "partiri/message-in-a-bottle"}}'
+  IMAGE_TAG: '{{.IMAGE_TAG | default "latest"}}'
+  BIN_DIR: bin
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list
+
+  # ─── Build ──────────────────────────────────────────────
+
+  build:
+    desc: Build all Go binaries
+    deps: [build:api, build:ws, build:worker]
+
+  build:api:
+    desc: Build the API server
+    cmds:
+      - CGO_ENABLED=0 go build -o {{.BIN_DIR}}/api ./cmd/api
+    sources:
+      - cmd/api/**/*.go
+      - internal/**/*.go
+      - go.mod
+    generates:
+      - "{{.BIN_DIR}}/api"
+
+  build:ws:
+    desc: Build the WebSocket server
+    cmds:
+      - CGO_ENABLED=0 go build -o {{.BIN_DIR}}/ws ./cmd/ws
+    sources:
+      - cmd/ws/**/*.go
+      - internal/**/*.go
+      - go.mod
+    generates:
+      - "{{.BIN_DIR}}/ws"
+
+  build:worker:
+    desc: Build the worker
+    cmds:
+      - CGO_ENABLED=0 go build -o {{.BIN_DIR}}/worker ./cmd/worker
+    sources:
+      - cmd/worker/**/*.go
+      - internal/**/*.go
+      - go.mod
+    generates:
+      - "{{.BIN_DIR}}/worker"
+
+  build:sdk:
+    desc: Build the TypeScript SDK
+    dir: packages/sdk
+    cmds:
+      - npm run build
+
+  build:all:
+    desc: Build Go binaries + SDK
+    deps: [build, build:sdk]
+
+  # ─── Test ───────────────────────────────────────────────
+
+  test:
+    desc: Run Go tests
+    cmds:
+      - go test ./...
+
+  test:sdk:
+    desc: Run SDK tests
+    dir: packages/sdk
+    cmds:
+      - npx vitest run
+
+  test:all:
+    desc: Run all tests
+    deps: [test, test:sdk]
+
+  # ─── Docker ─────────────────────────────────────────────
+
+  docker:
+    desc: Build Docker image
+    cmds:
+      - docker build -t {{.IMAGE_NAME}}:{{.IMAGE_TAG}} .
+
+  docker:push:
+    desc: Build and push Docker image
+    deps: [docker]
+    cmds:
+      - docker push {{.IMAGE_NAME}}:{{.IMAGE_TAG}}
+
+  # ─── Dev ────────────────────────────────────────────────
+
+  dev:
+    desc: Start local dev dependencies (MongoDB + Redis)
+    cmds:
+      - docker compose up -d mongo redis
+
+  run:
+    desc: Build and run all three processes locally
+    deps: [build]
+    cmds:
+      - |
+        trap 'kill 0' EXIT
+        ./{{.BIN_DIR}}/worker &
+        ./{{.BIN_DIR}}/ws &
+        ./{{.BIN_DIR}}/api
+
+  run:api:
+    desc: Build and run the API server
+    deps: [build:api]
+    cmds:
+      - ./{{.BIN_DIR}}/api
+
+  run:ws:
+    desc: Build and run the WebSocket server
+    deps: [build:ws]
+    cmds:
+      - ./{{.BIN_DIR}}/ws
+
+  run:worker:
+    desc: Build and run the worker
+    deps: [build:worker]
+    cmds:
+      - ./{{.BIN_DIR}}/worker
+
+  # ─── Misc ──────────────────────────────────────────────
+
+  deps:
+    desc: Download Go modules and install SDK dependencies
+    cmds:
+      - go mod download
+      - cd packages/sdk && npm install
+
+  fmt:
+    desc: Format Go code
+    cmds:
+      - gofmt -w .
+
+  clean:
+    desc: Remove build artifacts
+    cmds:
+      - rm -rf {{.BIN_DIR}}

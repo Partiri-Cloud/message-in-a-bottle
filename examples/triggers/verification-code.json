@@ -1,0 +1,9 @@
+{
+  "to": {
+    "subscriberId": "user-123"
+  },
+  "payload": {
+    "code": "847291",
+    "expiresInMinutes": "10"
+  }
+}

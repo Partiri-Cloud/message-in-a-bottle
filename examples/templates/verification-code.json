@@ -1,0 +1,13 @@
+{
+  "identifier": "verification-code",
+  "name": "Email Verification Code",
+  "channel": "email",
+  "subject": {
+    "en": "Your verification code: {{.Payload.code}}"
+  },
+  "body": {
+    "en": "<p>Hi {{default \"there\" .Subscriber.FirstName}},</p><p>Your verification code is: <strong>{{.Payload.code}}</strong></p><p>This code expires in {{.Payload.expiresInMinutes}} minutes. If you did not request this, please ignore this email.</p>"
+  },
+  "defaultLocale": "en",
+  "variables": ["code", "expiresInMinutes"]
+}

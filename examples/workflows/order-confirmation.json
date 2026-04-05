@@ -1,0 +1,89 @@
+{
+  "identifier": "order-confirmation",
+  "name": "Order Confirmation",
+  "description": "Confirms an order via email and in-app, waits 30 minutes, then sends an SMS if the subscriber has a phone number.",
+  "tags": ["e-commerce", "transactional"],
+  "steps": [
+    {
+      "type": "email",
+      "order": 1,
+      "defaultEnabled": true,
+      "template": {
+        "subject": {
+          "en": "Order #{{.Payload.orderId}} confirmed",
+          "fr": "Commande #{{.Payload.orderId}} confirmée",
+          "pt": "Pedido #{{.Payload.orderId}} confirmado",
+          "de": "Bestellung #{{.Payload.orderId}} bestätigt",
+          "it": "Ordine #{{.Payload.orderId}} confermato",
+          "es": "Pedido #{{.Payload.orderId}} confirmado"
+        },
+        "body": {
+          "en": "<h1>Order Confirmed</h1><p>Hi {{.Subscriber.FirstName}}, your order <strong>#{{.Payload.orderId}}</strong> for {{.Payload.total}} has been confirmed.</p><p>You can track your order <a href=\"{{.Payload.trackingUrl}}\">here</a>.</p>",
+          "fr": "<h1>Commande confirmée</h1><p>Bonjour {{.Subscriber.FirstName}}, votre commande <strong>#{{.Payload.orderId}}</strong> de {{.Payload.total}} a été confirmée.</p><p>Suivez votre commande <a href=\"{{.Payload.trackingUrl}}\">ici</a>.</p>",
+          "pt": "<h1>Pedido Confirmado</h1><p>Olá {{.Subscriber.FirstName}}, o seu pedido <strong>#{{.Payload.orderId}}</strong> de {{.Payload.total}} foi confirmado.</p><p>Acompanhe o seu pedido <a href=\"{{.Payload.trackingUrl}}\">aqui</a>.</p>",
+          "de": "<h1>Bestellung bestätigt</h1><p>Hallo {{.Subscriber.FirstName}}, Ihre Bestellung <strong>#{{.Payload.orderId}}</strong> über {{.Payload.total}} wurde bestätigt.</p><p>Verfolgen Sie Ihre Bestellung <a href=\"{{.Payload.trackingUrl}}\">hier</a>.</p>",
+          "it": "<h1>Ordine confermato</h1><p>Ciao {{.Subscriber.FirstName}}, il tuo ordine <strong>#{{.Payload.orderId}}</strong> di {{.Payload.total}} è stato confermato.</p><p>Segui il tuo ordine <a href=\"{{.Payload.trackingUrl}}\">qui</a>.</p>",
+          "es": "<h1>Pedido confirmado</h1><p>Hola {{.Subscriber.FirstName}}, tu pedido <strong>#{{.Payload.orderId}}</strong> por {{.Payload.total}} ha sido confirmado.</p><p>Rastrea tu pedido <a href=\"{{.Payload.trackingUrl}}\">aquí</a>.</p>"
+        }
+      }
+    },
+    {
+      "type": "in_app",
+      "order": 2,
+      "defaultEnabled": true,
+      "template": {
+        "subject": {
+          "en": "Order confirmed",
+          "fr": "Commande confirmée",
+          "pt": "Pedido confirmado",
+          "de": "Bestellung bestätigt",
+          "it": "Ordine confermato",
+          "es": "Pedido confirmado"
+        },
+        "content": {
+          "en": "Your order #{{.Payload.orderId}} for {{.Payload.total}} has been confirmed.",
+          "fr": "Votre commande #{{.Payload.orderId}} de {{.Payload.total}} a été confirmée.",
+          "pt": "O seu pedido #{{.Payload.orderId}} de {{.Payload.total}} foi confirmado.",
+          "de": "Ihre Bestellung #{{.Payload.orderId}} über {{.Payload.total}} wurde bestätigt.",
+          "it": "Il tuo ordine #{{.Payload.orderId}} di {{.Payload.total}} è stato confermato.",
+          "es": "Tu pedido #{{.Payload.orderId}} por {{.Payload.total}} ha sido confirmado."
+        }
+      }
+    },
+    {
+      "type": "delay",
+      "order": 3,
+      "defaultEnabled": true,
+      "delayConfig": {
+        "amount": 30,
+        "unit": "minutes"
+      }
+    },
+    {
+      "type": "sms",
+      "order": 4,
+      "defaultEnabled": true,
+      "template": {
+        "content": {
+          "en": "Your order #{{.Payload.orderId}} is being prepared. Track it: {{.Payload.trackingUrl}}",
+          "fr": "Votre commande #{{.Payload.orderId}} est en cours de préparation. Suivez-la : {{.Payload.trackingUrl}}",
+          "pt": "O seu pedido #{{.Payload.orderId}} está sendo preparado. Acompanhe: {{.Payload.trackingUrl}}",
+          "de": "Ihre Bestellung #{{.Payload.orderId}} wird vorbereitet. Verfolgen Sie sie: {{.Payload.trackingUrl}}",
+          "it": "Il tuo ordine #{{.Payload.orderId}} è in preparazione. Seguilo: {{.Payload.trackingUrl}}",
+          "es": "Tu pedido #{{.Payload.orderId}} se está preparando. Rastrealo: {{.Payload.trackingUrl}}"
+        }
+      },
+      "conditions": [
+        { "field": "subscriber.phone", "operator": "ne", "value": "" }
+      ]
+    }
+  ],
+  "preferenceDefaults": {
+    "email": true,
+    "inApp": true,
+    "sms": true,
+    "push": false,
+    "slack": false,
+    "msTeams": false
+  }
+}
