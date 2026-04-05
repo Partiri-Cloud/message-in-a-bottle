@@ -1,0 +1,11 @@
+{
+  "workflowIdentifier": "comment-mention",
+  "to": [
+    { "subscriberId": "user-456" }
+  ],
+  "payload": {
+    "commenterName": "Sarah Chen",
+    "postTitle": "Q2 Roadmap",
+    "commentPreview": "Great idea, let's discuss this further..."
+  }
+}

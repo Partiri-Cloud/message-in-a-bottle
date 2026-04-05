@@ -1,0 +1,10 @@
+{
+  "workflowIdentifier": "activity-digest",
+  "to": [
+    { "subscriberId": "user-123" }
+  ],
+  "payload": {
+    "activitySummary": "3 new comments on your posts, 2 new followers, 1 project invitation.",
+    "activityUrl": "https://app.acme.com/activity"
+  }
+}

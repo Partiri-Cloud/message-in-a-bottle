@@ -1,0 +1,39 @@
+{
+  "identifier": "activity-digest",
+  "name": "Activity Digest",
+  "description": "Collects activity events over a 1-hour window and sends a digest email.",
+  "tags": ["digest", "engagement"],
+  "steps": [
+    {
+      "type": "digest",
+      "order": 1,
+      "defaultEnabled": true,
+      "digestConfig": {
+        "amount": 1,
+        "unit": "hours",
+        "digestKey": "activityDigest"
+      }
+    },
+    {
+      "type": "email",
+      "order": 2,
+      "defaultEnabled": true,
+      "template": {
+        "subject": {
+          "en": "Your activity summary"
+        },
+        "body": {
+          "en": "<h1>Activity Summary</h1><p>Hi {{.Subscriber.FirstName}},</p><p>Here's what happened in the last hour:</p><p>{{.Payload.activitySummary}}</p><p><a href=\"{{.Payload.activityUrl}}\">View all activity</a></p>"
+        }
+      }
+    }
+  ],
+  "preferenceDefaults": {
+    "email": true,
+    "inApp": false,
+    "sms": false,
+    "push": false,
+    "slack": false,
+    "msTeams": false
+  }
+}

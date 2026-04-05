@@ -1,0 +1,13 @@
+{
+  "to": {
+    "subscriberId": "user-123"
+  },
+  "payload": {
+    "orderId": "ORD-20260405-001",
+    "carrier": "DHL",
+    "trackingNumber": "1Z9999999999999999",
+    "estimatedDelivery": "April 9, 2026",
+    "trackingUrl": "https://tracking.dhl.com/1Z9999999999999999"
+  },
+  "locale": "en"
+}

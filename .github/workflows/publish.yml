@@ -1,0 +1,86 @@
+name: Publish
+
+on:
+  push:
+    branches: [master, dev]
+
+env:
+  IMAGE_NAME: message-in-a-bottle
+
+jobs:
+  docker:
+    name: Build & Push Docker Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: version
+        run: echo "version=$(cat VERSION)" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/metadata-action@v6
+        id: meta
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ steps.version.outputs.version }},enable=${{ github.ref == 'refs/heads/master' }}
+            type=raw,value=${{ steps.version.outputs.version }}-dev,enable=${{ github.ref == 'refs/heads/dev' }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' }}
+            type=raw,value=latest-dev,enable=${{ github.ref == 'refs/heads/dev' }}
+
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  publish-sdk:
+    name: Publish SDK to GitHub Packages
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    defaults:
+      run:
+        working-directory: packages/sdk
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://npm.pkg.github.com
+          cache: npm
+          cache-dependency-path: packages/sdk/package-lock.json
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Publish dev prerelease
+        if: github.ref == 'refs/heads/dev'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          BASE_VERSION=$(node -p "require('./package.json').version")
+          npm version "${BASE_VERSION}-dev.${SHORT_SHA}" --no-git-tag-version
+          npm publish --tag dev
+
+      - name: Publish release
+        if: github.ref == 'refs/heads/master'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
+          VERSION=$(node -p "require('./package.json').version")
+          npm view "${PACKAGE_NAME}@${VERSION}" version 2>/dev/null && echo "Version ${VERSION} already published, skipping" && exit 0
+          npm publish

@@ -1,0 +1,50 @@
+services:
+  mongo:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    entrypoint: ["/api"]
+    ports:
+      - "3000:3000"
+    env_file: .env
+    depends_on:
+      - mongo
+      - redis
+
+  ws:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    entrypoint: ["/ws"]
+    ports:
+      - "3001:3001"
+    env_file: .env
+    depends_on:
+      - mongo
+      - redis
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    entrypoint: ["/worker"]
+    env_file: .env
+    depends_on:
+      - mongo
+      - redis
+
+volumes:
+  mongo_data:

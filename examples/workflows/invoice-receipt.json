@@ -1,0 +1,39 @@
+{
+  "identifier": "invoice-receipt",
+  "name": "Invoice Receipt",
+  "description": "Sends a billing receipt email with invoice details.",
+  "tags": ["billing", "transactional"],
+  "steps": [
+    {
+      "type": "email",
+      "order": 1,
+      "defaultEnabled": true,
+      "template": {
+        "subject": {
+          "en": "Invoice #{{.Payload.invoiceNumber}} — {{.Payload.currency}} {{.Payload.amount}}",
+          "fr": "Facture #{{.Payload.invoiceNumber}} — {{.Payload.currency}} {{.Payload.amount}}",
+          "pt": "Fatura #{{.Payload.invoiceNumber}} — {{.Payload.currency}} {{.Payload.amount}}",
+          "de": "Rechnung #{{.Payload.invoiceNumber}} — {{.Payload.currency}} {{.Payload.amount}}",
+          "it": "Fattura #{{.Payload.invoiceNumber}} — {{.Payload.currency}} {{.Payload.amount}}",
+          "es": "Factura #{{.Payload.invoiceNumber}} — {{.Payload.currency}} {{.Payload.amount}}"
+        },
+        "body": {
+          "en": "<h1>Payment Receipt</h1><p>Hi {{.Subscriber.FirstName}},</p><p>We've received your payment. Here are the details:</p><table border=\"1\" cellpadding=\"8\" cellspacing=\"0\" style=\"border-collapse:collapse\"><tr><td><strong>Invoice</strong></td><td>#{{.Payload.invoiceNumber}}</td></tr><tr><td><strong>Amount</strong></td><td>{{.Payload.currency}} {{.Payload.amount}}</td></tr><tr><td><strong>Date</strong></td><td>{{.Payload.date}}</td></tr><tr><td><strong>Plan</strong></td><td>{{.Payload.planName}}</td></tr></table><p><a href=\"{{.Payload.invoiceUrl}}\">View full invoice</a></p>",
+          "fr": "<h1>Reçu de paiement</h1><p>Bonjour {{.Subscriber.FirstName}},</p><p>Nous avons reçu votre paiement. Voici les détails :</p><table border=\"1\" cellpadding=\"8\" cellspacing=\"0\" style=\"border-collapse:collapse\"><tr><td><strong>Facture</strong></td><td>#{{.Payload.invoiceNumber}}</td></tr><tr><td><strong>Montant</strong></td><td>{{.Payload.currency}} {{.Payload.amount}}</td></tr><tr><td><strong>Date</strong></td><td>{{.Payload.date}}</td></tr><tr><td><strong>Plan</strong></td><td>{{.Payload.planName}}</td></tr></table><p><a href=\"{{.Payload.invoiceUrl}}\">Voir la facture complète</a></p>",
+          "pt": "<h1>Recibo de Pagamento</h1><p>Olá {{.Subscriber.FirstName}},</p><p>Recebemos o seu pagamento. Aqui estão os detalhes:</p><table border=\"1\" cellpadding=\"8\" cellspacing=\"0\" style=\"border-collapse:collapse\"><tr><td><strong>Fatura</strong></td><td>#{{.Payload.invoiceNumber}}</td></tr><tr><td><strong>Valor</strong></td><td>{{.Payload.currency}} {{.Payload.amount}}</td></tr><tr><td><strong>Data</strong></td><td>{{.Payload.date}}</td></tr><tr><td><strong>Plano</strong></td><td>{{.Payload.planName}}</td></tr></table><p><a href=\"{{.Payload.invoiceUrl}}\">Ver fatura completa</a></p>",
+          "de": "<h1>Zahlungsbeleg</h1><p>Hallo {{.Subscriber.FirstName}},</p><p>Wir haben Ihre Zahlung erhalten. Hier sind die Details:</p><table border=\"1\" cellpadding=\"8\" cellspacing=\"0\" style=\"border-collapse:collapse\"><tr><td><strong>Rechnung</strong></td><td>#{{.Payload.invoiceNumber}}</td></tr><tr><td><strong>Betrag</strong></td><td>{{.Payload.currency}} {{.Payload.amount}}</td></tr><tr><td><strong>Datum</strong></td><td>{{.Payload.date}}</td></tr><tr><td><strong>Plan</strong></td><td>{{.Payload.planName}}</td></tr></table><p><a href=\"{{.Payload.invoiceUrl}}\">Vollständige Rechnung ansehen</a></p>",
+          "it": "<h1>Ricevuta di Pagamento</h1><p>Ciao {{.Subscriber.FirstName}},</p><p>Abbiamo ricevuto il tuo pagamento. Ecco i dettagli:</p><table border=\"1\" cellpadding=\"8\" cellspacing=\"0\" style=\"border-collapse:collapse\"><tr><td><strong>Fattura</strong></td><td>#{{.Payload.invoiceNumber}}</td></tr><tr><td><strong>Importo</strong></td><td>{{.Payload.currency}} {{.Payload.amount}}</td></tr><tr><td><strong>Data</strong></td><td>{{.Payload.date}}</td></tr><tr><td><strong>Piano</strong></td><td>{{.Payload.planName}}</td></tr></table><p><a href=\"{{.Payload.invoiceUrl}}\">Vedi fattura completa</a></p>",
+          "es": "<h1>Recibo de Pago</h1><p>Hola {{.Subscriber.FirstName}},</p><p>Hemos recibido tu pago. Aquí están los detalles:</p><table border=\"1\" cellpadding=\"8\" cellspacing=\"0\" style=\"border-collapse:collapse\"><tr><td><strong>Factura</strong></td><td>#{{.Payload.invoiceNumber}}</td></tr><tr><td><strong>Monto</strong></td><td>{{.Payload.currency}} {{.Payload.amount}}</td></tr><tr><td><strong>Fecha</strong></td><td>{{.Payload.date}}</td></tr><tr><td><strong>Plan</strong></td><td>{{.Payload.planName}}</td></tr></table><p><a href=\"{{.Payload.invoiceUrl}}\">Ver factura completa</a></p>"
+        }
+      }
+    }
+  ],
+  "preferenceDefaults": {
+    "email": true,
+    "inApp": false,
+    "sms": false,
+    "push": false,
+    "slack": false,
+    "msTeams": false
+  }
+}

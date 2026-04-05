@@ -1,0 +1,11 @@
+{
+  "workflowIdentifier": "order-confirmation",
+  "to": [
+    { "subscriberId": "user-123" }
+  ],
+  "payload": {
+    "orderId": "ORD-20260405-001",
+    "total": "$129.99",
+    "trackingUrl": "https://app.acme.com/orders/ORD-20260405-001"
+  }
+}
