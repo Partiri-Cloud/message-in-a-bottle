@@ -1,0 +1,42 @@
+{
+  "identifier": "comment-mention",
+  "name": "Comment or Mention",
+  "description": "Notifies a user via in-app and push when someone comments on or mentions them.",
+  "tags": ["social", "collaboration"],
+  "steps": [
+    {
+      "type": "in_app",
+      "order": 1,
+      "defaultEnabled": true,
+      "template": {
+        "subject": {
+          "en": "{{.Payload.commenterName}} mentioned you"
+        },
+        "content": {
+          "en": "{{.Payload.commenterName}} mentioned you in {{.Payload.postTitle}}: \"{{.Payload.commentPreview}}\""
+        }
+      }
+    },
+    {
+      "type": "push",
+      "order": 2,
+      "defaultEnabled": true,
+      "template": {
+        "subject": {
+          "en": "{{.Payload.commenterName}} mentioned you"
+        },
+        "body": {
+          "en": "In {{.Payload.postTitle}}: \"{{.Payload.commentPreview}}\""
+        }
+      }
+    }
+  ],
+  "preferenceDefaults": {
+    "email": false,
+    "inApp": true,
+    "sms": false,
+    "push": true,
+    "slack": false,
+    "msTeams": false
+  }
+}

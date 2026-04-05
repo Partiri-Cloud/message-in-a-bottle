@@ -1,0 +1,45 @@
+# Go binaries (cmd/api, cmd/ws, cmd/worker)
+/api
+/ws
+/worker
+/bin/
+*.exe
+
+# Go build / test artifacts
+*.test
+*.out
+*.prof
+*.pprof
+cover.out
+coverage.html
+
+# Go module cache (vendored deps if present)
+/vendor/
+
+# Node.js / TypeScript SDK (packages/sdk)
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.override.yml
+
+# Build / temp
+/tmp/
+*.log

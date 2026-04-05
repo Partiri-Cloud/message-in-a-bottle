@@ -1,0 +1,14 @@
+{
+  "workflowIdentifier": "invoice-receipt",
+  "to": [
+    { "subscriberId": "user-123" }
+  ],
+  "payload": {
+    "invoiceNumber": "INV-2026-0042",
+    "amount": "49.00",
+    "currency": "EUR",
+    "date": "2026-04-05",
+    "planName": "Pro Monthly",
+    "invoiceUrl": "https://app.acme.com/invoices/INV-2026-0042"
+  }
+}

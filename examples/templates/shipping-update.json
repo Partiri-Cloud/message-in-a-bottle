@@ -1,0 +1,15 @@
+{
+  "identifier": "shipping-update",
+  "name": "Shipping Update",
+  "channel": "email",
+  "subject": {
+    "en": "Your order #{{.Payload.orderId}} has shipped",
+    "pt": "O seu pedido #{{.Payload.orderId}} foi enviado"
+  },
+  "body": {
+    "en": "<p>Hi {{.Subscriber.FirstName}},</p><p>Your order <strong>#{{.Payload.orderId}}</strong> has been shipped via {{.Payload.carrier}}.</p><p><strong>Tracking number:</strong> {{.Payload.trackingNumber}}</p><p><strong>Estimated delivery:</strong> {{.Payload.estimatedDelivery}}</p><p><a href=\"{{.Payload.trackingUrl}}\">Track your package</a></p>",
+    "pt": "<p>Olá {{.Subscriber.FirstName}},</p><p>O seu pedido <strong>#{{.Payload.orderId}}</strong> foi enviado via {{.Payload.carrier}}.</p><p><strong>Código de rastreio:</strong> {{.Payload.trackingNumber}}</p><p><strong>Entrega estimada:</strong> {{.Payload.estimatedDelivery}}</p><p><a href=\"{{.Payload.trackingUrl}}\">Rastrear encomenda</a></p>"
+  },
+  "defaultLocale": "en",
+  "variables": ["orderId", "carrier", "trackingNumber", "estimatedDelivery", "trackingUrl"]
+}
