@@ -82,7 +82,7 @@ func (r *EnvironmentRepository) AddAPIKey(ctx context.Context, envID bson.Object
 }
 
 func (r *EnvironmentRepository) FindAll(ctx context.Context) ([]model.Environment, error) {
-	cursor, err := r.col.Find(ctx, bson.M{}, options.Find().SetSort(bson.D{{"createdAt", 1}}))
+	cursor, err := r.col.Find(ctx, bson.M{}, options.Find().SetSort(bson.D{{Key: "createdAt", Value: 1}}))
 	if err != nil {
 		return nil, err
 	}
