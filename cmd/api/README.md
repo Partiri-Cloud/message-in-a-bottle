@@ -15,6 +15,7 @@ All `/api/v1` endpoints require `Authorization: ApiKey <key>` header.
 
 | Variable                     | Description                                                      |
 |------------------------------|------------------------------------------------------------------|
+| `ADMIN_SECRET`               | Secret for `/admin/*` endpoints. `openssl rand -hex 32`          |
 | `CREDENTIALS_ENCRYPTION_KEY` | AES-256-GCM key (64 hex chars). `openssl rand -hex 32`          |
 
 ### Required infrastructure
@@ -37,13 +38,13 @@ All `/api/v1` endpoints require `Authorization: ApiKey <key>` header.
 
 ### Not used by this service
 
-`SUBSCRIBER_HMAC_SECRET`, `WS_ALLOWED_ORIGINS`, `WS_PORT`, `RATE_LIMIT_CONFIG` -- these are used by the WS server or worker only.
+`SUBSCRIBER_HMAC_SECRET`, `WS_ALLOWED_ORIGINS`, `WS_PORT`, `RATE_LIMIT_CONFIG` -- used by the WS server or worker only.
 
 ## Run
 
 ```bash
 # Standalone
-CREDENTIALS_ENCRYPTION_KEY=<key> ./api
+ADMIN_SECRET=<secret> CREDENTIALS_ENCRYPTION_KEY=<key> ./api
 
 # Docker
 docker run -p 3000:3000 --env-file .env --entrypoint /api partiri/message-in-a-bottle

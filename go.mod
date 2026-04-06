@@ -1,4 +1,4 @@
-module github.com/partiri/message-in-a-bottle
+module github.com/partiri-cloud/message-in-a-box
 
 go 1.25.0
 

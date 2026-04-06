@@ -10,7 +10,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
-	"github.com/partiri/message-in-a-bottle/internal/repository"
+	"github.com/partiri-cloud/message-in-a-box/internal/repository"
 )
 
 type DigestHandler struct {

@@ -9,7 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/ses"
 	"github.com/aws/aws-sdk-go-v2/service/ses/types"
-	"github.com/partiri/message-in-a-bottle/internal/model"
+	"github.com/partiri-cloud/message-in-a-box/internal/model"
 )
 
 type SESProvider struct {

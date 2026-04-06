@@ -3,9 +3,9 @@ package service
 import (
 	"context"
 
-	"github.com/partiri/message-in-a-bottle/internal/engine"
-	"github.com/partiri/message-in-a-bottle/internal/model"
-	"github.com/partiri/message-in-a-bottle/internal/repository"
+	"github.com/partiri-cloud/message-in-a-box/internal/engine"
+	"github.com/partiri-cloud/message-in-a-box/internal/model"
+	"github.com/partiri-cloud/message-in-a-box/internal/repository"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )

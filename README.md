@@ -50,8 +50,8 @@ Subscriber preferences cascade: workflow-specific > global > workflow defaults.
 
 ```bash
 cp .env.example .env
-# Fill in at least CREDENTIALS_ENCRYPTION_KEY and SUBSCRIBER_HMAC_SECRET:
-#   openssl rand -hex 32  (run twice, one for each)
+# Fill in at least ADMIN_SECRET, CREDENTIALS_ENCRYPTION_KEY, and SUBSCRIBER_HMAC_SECRET:
+#   openssl rand -hex 32  (run three times, one for each)
 ```
 
 ### Run everything together (docker compose)
@@ -126,7 +126,7 @@ Run each binary with its required env vars:
 ```bash
 # API server (port 3000)
 MONGO_URI=mongodb://db:27017 REDIS_ADDR=redis:6379 \
-  CREDENTIALS_ENCRYPTION_KEY=<key> \
+  ADMIN_SECRET=<secret> CREDENTIALS_ENCRYPTION_KEY=<key> \
   ./bin/api
 
 # WebSocket server (port 3001)
@@ -168,7 +168,7 @@ docker run --env-file .env --entrypoint /worker miab
 
 Each service documents its own required and optional env vars:
 
-- [`cmd/api/README.md`](cmd/api/README.md) -- needs `CREDENTIALS_ENCRYPTION_KEY`
+- [`cmd/api/README.md`](cmd/api/README.md) -- needs `ADMIN_SECRET`, `CREDENTIALS_ENCRYPTION_KEY`
 - [`cmd/ws/README.md`](cmd/ws/README.md) -- needs `SUBSCRIBER_HMAC_SECRET`
 - [`cmd/worker/README.md`](cmd/worker/README.md) -- needs `CREDENTIALS_ENCRYPTION_KEY`
 
@@ -180,6 +180,7 @@ All three need `MONGO_URI`, `MONGO_DB`, `REDIS_ADDR`, and `REDIS_PASSWORD` to re
 
 | Variable                     | Description                                                                 |
 |------------------------------|-----------------------------------------------------------------------------|
+| `ADMIN_SECRET`               | Secret for authenticating admin API requests (`/admin/*` endpoints). Generate with `openssl rand -hex 32`. |
 | `CREDENTIALS_ENCRYPTION_KEY` | AES-256-GCM key for encrypting integration credentials. 64 hex chars (32 bytes). Generate with `openssl rand -hex 32`. |
 | `SUBSCRIBER_HMAC_SECRET`     | HMAC-SHA256 secret for signing subscriber tokens. Required by the WS server. Generate with `openssl rand -hex 32`. |
 

@@ -4,10 +4,10 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/partiri/message-in-a-bottle/internal/handler/dto"
-	"github.com/partiri/message-in-a-bottle/internal/middleware"
-	"github.com/partiri/message-in-a-bottle/internal/model"
-	"github.com/partiri/message-in-a-bottle/internal/repository"
+	"github.com/partiri-cloud/message-in-a-box/internal/handler/dto"
+	"github.com/partiri-cloud/message-in-a-box/internal/middleware"
+	"github.com/partiri-cloud/message-in-a-box/internal/model"
+	"github.com/partiri-cloud/message-in-a-box/internal/repository"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 

@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/partiri/message-in-a-bottle/internal/crypto"
-	"github.com/partiri/message-in-a-bottle/internal/model"
+	"github.com/partiri-cloud/message-in-a-box/internal/crypto"
+	"github.com/partiri-cloud/message-in-a-box/internal/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

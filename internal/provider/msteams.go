@@ -8,7 +8,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/partiri/message-in-a-bottle/internal/model"
+	"github.com/partiri-cloud/message-in-a-box/internal/model"
 )
 
 type MSTeamsProvider struct{}

@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/partiri/message-in-a-bottle/internal/model"
+	"github.com/partiri-cloud/message-in-a-box/internal/model"
 	"github.com/sideshow/apns2"
 	"github.com/sideshow/apns2/payload"
 	"github.com/sideshow/apns2/token"

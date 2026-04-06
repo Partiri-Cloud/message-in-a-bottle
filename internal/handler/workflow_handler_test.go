@@ -3,7 +3,7 @@ package handler
 import (
 	"testing"
 
-	"github.com/partiri/message-in-a-bottle/internal/handler/dto"
+	"github.com/partiri-cloud/message-in-a-box/internal/handler/dto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

@@ -2,8 +2,8 @@ package handler
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/partiri/message-in-a-bottle/internal/middleware"
-	"github.com/partiri/message-in-a-bottle/internal/repository"
+	"github.com/partiri-cloud/message-in-a-box/internal/middleware"
+	"github.com/partiri-cloud/message-in-a-box/internal/repository"
 )
 
 type Handlers struct {

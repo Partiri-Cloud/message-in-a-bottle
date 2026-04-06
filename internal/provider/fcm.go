@@ -7,7 +7,7 @@ import (
 
 	firebase "firebase.google.com/go/v4"
 	"firebase.google.com/go/v4/messaging"
-	"github.com/partiri/message-in-a-bottle/internal/model"
+	"github.com/partiri-cloud/message-in-a-box/internal/model"
 	"google.golang.org/api/option"
 )
 

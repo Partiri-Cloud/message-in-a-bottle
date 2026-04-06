@@ -6,8 +6,8 @@ import (
 	"fmt"
 
 	"github.com/hibiken/asynq"
-	"github.com/partiri/message-in-a-bottle/internal/engine"
-	"github.com/partiri/message-in-a-bottle/internal/repository"
+	"github.com/partiri-cloud/message-in-a-box/internal/engine"
+	"github.com/partiri-cloud/message-in-a-box/internal/repository"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 

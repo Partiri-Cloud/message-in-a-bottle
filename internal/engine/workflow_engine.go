@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/partiri/message-in-a-bottle/internal/model"
+	"github.com/partiri-cloud/message-in-a-box/internal/model"
 )
 
 type PlannedStep struct {

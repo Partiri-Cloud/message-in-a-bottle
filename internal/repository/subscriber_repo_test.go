@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/partiri/message-in-a-bottle/internal/model"
-	"github.com/partiri/message-in-a-bottle/internal/testutil"
+	"github.com/partiri-cloud/message-in-a-box/internal/model"
+	"github.com/partiri-cloud/message-in-a-box/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.mongodb.org/mongo-driver/v2/bson"
