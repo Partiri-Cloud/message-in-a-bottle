@@ -11,10 +11,20 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /bin/api ./cmd/api
 RUN CGO_ENABLED=0 GOOS=linux go build -o /bin/ws ./cmd/ws
 RUN CGO_ENABLED=0 GOOS=linux go build -o /bin/worker ./cmd/worker
 
-FROM gcr.io/distroless/static-debian12
+FROM mongo:7
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    redis-server redis-tools \
+  && rm -rf /var/lib/apt/lists/*
+
+RUN useradd -u 1001 -r -m miab \
+  && mkdir -p /data/db /var/log/miab \
+  && chown -R miab:miab /data/db /var/log/miab
 
 COPY --from=builder /bin/api /bin/ws /bin/worker /
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
-USER 1001
+USER miab
 
-ENTRYPOINT ["/api"]
+ENTRYPOINT ["/entrypoint.sh"]
