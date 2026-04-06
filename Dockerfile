@@ -7,9 +7,10 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -o /bin/api ./cmd/api
-RUN CGO_ENABLED=0 GOOS=linux go build -o /bin/ws ./cmd/ws
-RUN CGO_ENABLED=0 GOOS=linux go build -o /bin/worker ./cmd/worker
+RUN CGO_ENABLED=0 GOOS=linux go build -o /bin/api ./cmd/api & \
+    CGO_ENABLED=0 GOOS=linux go build -o /bin/ws ./cmd/ws & \
+    CGO_ENABLED=0 GOOS=linux go build -o /bin/worker ./cmd/worker & \
+    wait
 
 FROM mongo:7
 

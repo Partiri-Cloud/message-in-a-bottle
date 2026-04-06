@@ -6,12 +6,18 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
+)
+
+var (
+	mongoOnce      sync.Once
+	mongoAvailable bool
 )
 
 // MongoURI returns the MongoDB URI for testing.
@@ -22,23 +28,44 @@ func MongoURI() string {
 	return "mongodb://localhost:27017"
 }
 
+func checkMongo() bool {
+	mongoOnce.Do(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+
+		opts := options.Client().ApplyURI(MongoURI()).SetConnectTimeout(2 * time.Second).SetServerSelectionTimeout(2 * time.Second)
+		client, err := mongo.Connect(opts)
+		if err != nil {
+			return
+		}
+		defer client.Disconnect(context.Background())
+
+		if err := client.Ping(ctx, nil); err != nil {
+			return
+		}
+		mongoAvailable = true
+	})
+	return mongoAvailable
+}
+
 // SetupTestDB creates a test database with a unique name. Skips the test if MongoDB is not available.
 func SetupTestDB(t *testing.T) (*mongo.Database, func()) {
 	t.Helper()
+
+	if !checkMongo() {
+		t.Skip("skipping integration test: MongoDB not available")
+	}
+
 	ctx := context.Background()
-
-	connCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-	defer cancel()
-
 	opts := options.Client().ApplyURI(MongoURI()).SetConnectTimeout(3 * time.Second).SetServerSelectionTimeout(3 * time.Second)
 	client, err := mongo.Connect(opts)
 	if err != nil {
-		t.Skipf("skipping integration test: cannot connect to MongoDB: %v", err)
+		t.Fatalf("failed to connect to MongoDB: %v", err)
 	}
 
-	if err := client.Ping(connCtx, nil); err != nil {
+	if err := client.Ping(ctx, nil); err != nil {
 		client.Disconnect(context.Background())
-		t.Skipf("skipping integration test: MongoDB not available: %v", err)
+		t.Fatalf("failed to ping MongoDB: %v", err)
 	}
 
 	dbName := fmt.Sprintf("mib_test_%d", time.Now().UnixNano())

@@ -36,12 +36,16 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' }}
             type=raw,value=latest-dev,enable=${{ github.ref == 'refs/heads/dev' }}
 
+      - uses: docker/setup-buildx-action@v3
+
       - uses: docker/build-push-action@v7
         with:
           context: .
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   publish-sdk:
     name: Publish SDK to GitHub Packages
@@ -55,7 +59,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 24
           registry-url: https://npm.pkg.github.com
