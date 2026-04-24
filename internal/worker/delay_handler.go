@@ -7,7 +7,7 @@ import (
 	"log"
 
 	"github.com/hibiken/asynq"
-	"github.com/partiri/message-in-a-bottle/internal/repository"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/repository"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
@@ -26,7 +26,10 @@ func (h *DelayHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 		return fmt.Errorf("unmarshal delay payload: %w", err)
 	}
 
-	wfID, _ := bson.ObjectIDFromHex(payload.WorkflowID)
+	wfID, err := bson.ObjectIDFromHex(payload.WorkflowID)
+	if err != nil {
+		return fmt.Errorf("invalid workflowId %q: %w", payload.WorkflowID, err)
+	}
 	wf, err := h.wfRepo.FindByID(ctx, wfID)
 	if err != nil {
 		return fmt.Errorf("find workflow: %w", err)
@@ -49,7 +52,11 @@ func (h *DelayHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 			Overrides:      payload.Overrides,
 			Attempt:        0,
 		}
-		data, _ := json.Marshal(dp)
+		data, merr := json.Marshal(dp)
+		if merr != nil {
+			log.Printf("failed to marshal post-delay delivery step %d: %v", i, merr)
+			continue
+		}
 		task := asynq.NewTask(TaskTypeDelivery, data)
 		if _, err := h.asynq.Enqueue(task); err != nil {
 			log.Printf("failed to enqueue post-delay delivery step %d: %v", i, err)
