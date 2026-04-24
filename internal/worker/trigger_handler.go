@@ -8,18 +8,21 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
-	"github.com/partiri/message-in-a-bottle/internal/engine"
-	"github.com/partiri/message-in-a-bottle/internal/model"
-	"github.com/partiri/message-in-a-bottle/internal/repository"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/engine"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/model"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/repository"
+	"github.com/redis/go-redis/v9"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 type TriggerHandler struct {
-	wfRepo       *repository.WorkflowRepository
-	subRepo      *repository.SubscriberRepository
-	notifRepo    *repository.NotificationRepository
-	activityRepo *repository.ActivityRepository
-	asynq        *asynq.Client
+	wfRepo        *repository.WorkflowRepository
+	subRepo       *repository.SubscriberRepository
+	notifRepo     *repository.NotificationRepository
+	activityRepo  *repository.ActivityRepository
+	asynq         *asynq.Client
+	rdb           *redis.Client
+	retentionDays int
 }
 
 func NewTriggerHandler(
@@ -28,13 +31,17 @@ func NewTriggerHandler(
 	notifRepo *repository.NotificationRepository,
 	activityRepo *repository.ActivityRepository,
 	asynqClient *asynq.Client,
+	rdb *redis.Client,
+	retentionDays int,
 ) *TriggerHandler {
 	return &TriggerHandler{
-		wfRepo:       wfRepo,
-		subRepo:      subRepo,
-		notifRepo:    notifRepo,
-		activityRepo: activityRepo,
-		asynq:        asynqClient,
+		wfRepo:        wfRepo,
+		subRepo:       subRepo,
+		notifRepo:     notifRepo,
+		activityRepo:  activityRepo,
+		asynq:         asynqClient,
+		rdb:           rdb,
+		retentionDays: retentionDays,
 	}
 }
 
@@ -44,8 +51,14 @@ func (h *TriggerHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 		return fmt.Errorf("unmarshal trigger payload: %w", err)
 	}
 
-	envID, _ := bson.ObjectIDFromHex(payload.EnvironmentID)
-	wfID, _ := bson.ObjectIDFromHex(payload.WorkflowID)
+	envID, err := bson.ObjectIDFromHex(payload.EnvironmentID)
+	if err != nil {
+		return fmt.Errorf("invalid environmentId %q: %w", payload.EnvironmentID, err)
+	}
+	wfID, err := bson.ObjectIDFromHex(payload.WorkflowID)
+	if err != nil {
+		return fmt.Errorf("invalid workflowId %q: %w", payload.WorkflowID, err)
+	}
 
 	wf, err := h.wfRepo.FindByID(ctx, wfID)
 	if err != nil {
@@ -57,8 +70,12 @@ func (h *TriggerHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 		return nil
 	}
 
-	for _, subIDStr := range payload.SubscriberIDs {
-		subID, _ := bson.ObjectIDFromHex(subIDStr)
+	for subIDStr, notifIDStr := range payload.SubscriberIDs {
+		subID, err := bson.ObjectIDFromHex(subIDStr)
+		if err != nil {
+			log.Printf("invalid subscriberId %q, skipping: %v", subIDStr, err)
+			continue
+		}
 
 		subscriber, err := h.subRepo.FindByID(ctx, subID)
 		if err != nil {
@@ -66,24 +83,26 @@ func (h *TriggerHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 			continue
 		}
 
-		// Find notification for this subscriber + transaction
-		notif, err := h.notifRepo.FindByTransactionID(ctx, envID, payload.TransactionID)
+		notifID, err := bson.ObjectIDFromHex(notifIDStr)
 		if err != nil {
-			log.Printf("notification not found for tx %s, skipping", payload.TransactionID)
+			log.Printf("invalid notificationId %q for subscriber %s, skipping: %v", notifIDStr, subIDStr, err)
+			continue
+		}
+		notif, err := h.notifRepo.FindByID(ctx, notifID)
+		if err != nil {
+			log.Printf("notification %s not found for subscriber %s, skipping", notifIDStr, subIDStr)
 			continue
 		}
 
-		// Log workflow started
 		h.activityRepo.Create(ctx, &model.ActivityLog{
 			EnvironmentID:  envID,
 			NotificationID: notif.ID,
 			SubscriberID:   subID,
 			Event:          "workflow_started",
 			Detail:         map[string]any{"workflowId": wf.Identifier},
-			ExpireAt:       time.Now().Add(30 * 24 * time.Hour),
+			ExpireAt:       time.Now().Add(time.Duration(h.retentionDays) * 24 * time.Hour),
 		})
 
-		// Evaluate workflow steps
 		planned := engine.EvaluateWorkflow(wf, subscriber, payload.Payload, notif)
 
 		for _, ps := range planned {
@@ -95,7 +114,7 @@ func (h *TriggerHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 					Channel:        ps.Step.Type,
 					Event:          "step_skipped",
 					Detail:         map[string]any{"reason": ps.Reason, "stepIndex": ps.StepIndex},
-					ExpireAt:       time.Now().Add(30 * 24 * time.Hour),
+					ExpireAt:       time.Now().Add(time.Duration(h.retentionDays) * 24 * time.Hour),
 				})
 				continue
 			}
@@ -106,11 +125,10 @@ func (h *TriggerHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 					log.Printf("failed to enqueue delay: %v", err)
 				}
 			case "digest":
-				if err := h.enqueueDigest(ps, notif, subscriber, wf, payload); err != nil {
+				if err := h.enqueueDigest(ctx, ps, notif, subscriber, wf, payload); err != nil {
 					log.Printf("failed to enqueue digest: %v", err)
 				}
 			default:
-				// Channel delivery (email, sms, push, in_app, slack, ms_teams)
 				if err := h.enqueueDelivery(ps, notif, subscriber, payload); err != nil {
 					log.Printf("failed to enqueue delivery: %v", err)
 				}
@@ -132,9 +150,12 @@ func (h *TriggerHandler) enqueueDelivery(ps engine.PlannedStep, notif *model.Not
 		Overrides:      payload.Overrides,
 		Attempt:        0,
 	}
-	data, _ := json.Marshal(dp)
+	data, err := json.Marshal(dp)
+	if err != nil {
+		return fmt.Errorf("marshal delivery payload: %w", err)
+	}
 	task := asynq.NewTask(TaskTypeDelivery, data)
-	_, err := h.asynq.Enqueue(task)
+	_, err = h.asynq.Enqueue(task)
 	return err
 }
 
@@ -153,30 +174,62 @@ func (h *TriggerHandler) enqueueDelay(ps engine.PlannedStep, notif *model.Notifi
 		Payload:        payload.Payload,
 		Overrides:      payload.Overrides,
 	}
-	data, _ := json.Marshal(dp)
+	data, err := json.Marshal(dp)
+	if err != nil {
+		return fmt.Errorf("marshal delay payload: %w", err)
+	}
 	task := asynq.NewTask(TaskTypeDelay, data)
-	_, err := h.asynq.Enqueue(task, asynq.ProcessIn(duration))
+	_, err = h.asynq.Enqueue(task, asynq.ProcessIn(duration))
 	return err
 }
 
-func (h *TriggerHandler) enqueueDigest(ps engine.PlannedStep, notif *model.Notification, sub *model.Subscriber, wf *model.Workflow, payload TriggerPayload) error {
+func (h *TriggerHandler) enqueueDigest(ctx context.Context, ps engine.PlannedStep, notif *model.Notification, sub *model.Subscriber, wf *model.Workflow, payload TriggerPayload) error {
 	if ps.Step.DigestConfig == nil {
 		return nil
 	}
 
-	dp := DigestPayload{
-		EnvironmentID: payload.EnvironmentID,
-		WorkflowID:    wf.ID.Hex(),
-		SubscriberID:  sub.ID.Hex(),
-		Channel:       ps.Step.Type,
-		DigestKey:     ps.Step.DigestConfig.DigestKey,
-		StepIndex:     ps.StepIndex,
+	// Include step index to prevent key collision when multiple digest steps share the same DigestKey string.
+	digestKey := fmt.Sprintf("digest:%s:%s:%d:%s:%s",
+		payload.EnvironmentID,
+		wf.ID.Hex(),
+		ps.StepIndex,
+		sub.ID.Hex(),
+		ps.Step.DigestConfig.DigestKey,
+	)
+
+	// Accumulate this notification's ID in the Redis list.
+	// RPUSH returns the list length after the push.
+	count, err := h.rdb.RPush(ctx, digestKey, notif.ID.Hex()).Result()
+	if err != nil {
+		return fmt.Errorf("rpush digest key: %w", err)
 	}
-	data, _ := json.Marshal(dp)
+
 	duration := ParseDuration(ps.Step.DigestConfig.Amount, ps.Step.DigestConfig.Unit)
-	task := asynq.NewTask(TaskTypeDigest, data)
-	_, err := h.asynq.Enqueue(task, asynq.ProcessIn(duration))
-	return err
+
+	if count == 1 {
+		// First notification in this window: set TTL and schedule the digest task.
+		// Add a small buffer so the key outlives the task.
+		h.rdb.Expire(ctx, digestKey, duration+5*time.Minute)
+
+		dp := DigestPayload{
+			EnvironmentID: payload.EnvironmentID,
+			WorkflowID:    wf.ID.Hex(),
+			SubscriberID:  sub.ID.Hex(),
+			Channel:       ps.Step.Type,
+			DigestKey:     ps.Step.DigestConfig.DigestKey,
+			StepIndex:     ps.StepIndex,
+		}
+		data, err := json.Marshal(dp)
+		if err != nil {
+			return fmt.Errorf("marshal digest payload: %w", err)
+		}
+		task := asynq.NewTask(TaskTypeDigest, data)
+		_, err = h.asynq.Enqueue(task, asynq.ProcessIn(duration))
+		return err
+	}
+
+	// count > 1: a digest task is already scheduled for this window; nothing more to do.
+	return nil
 }
 
 func ParseDuration(amount int, unit string) time.Duration {
