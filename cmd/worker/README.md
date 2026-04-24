@@ -60,5 +60,5 @@ Failed deliveries retry with exponential backoff (30s base, 4x multiplier, max 3
 CREDENTIALS_ENCRYPTION_KEY=<key> ./worker
 
 # Docker
-docker run --env-file .env --entrypoint /worker partiri/message-in-a-bottle
+docker run --env-file .env --entrypoint /worker ghcr.io/partiri-cloud/message-in-a-bottle
 ```

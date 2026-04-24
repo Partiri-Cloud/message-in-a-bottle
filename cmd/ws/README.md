@@ -56,5 +56,5 @@ The server validates the API key, verifies the HMAC subscriber token against `SU
 SUBSCRIBER_HMAC_SECRET=<secret> ./ws
 
 # Docker
-docker run -p 3001:3001 --env-file .env --entrypoint /ws partiri/message-in-a-bottle
+docker run -p 3001:3001 --env-file .env --entrypoint /ws ghcr.io/partiri-cloud/message-in-a-bottle
 ```

@@ -8,10 +8,10 @@ import (
 	"syscall"
 
 	"github.com/hibiken/asynq"
-	"github.com/partiri/message-in-a-bottle/internal/config"
-	"github.com/partiri/message-in-a-bottle/internal/provider"
-	"github.com/partiri/message-in-a-bottle/internal/repository"
-	"github.com/partiri/message-in-a-bottle/internal/worker"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/config"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/provider"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/repository"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/worker"
 	"github.com/redis/go-redis/v9"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -79,10 +79,11 @@ func main() {
 	factory := provider.NewProviderFactory()
 
 	// Task handlers
-	triggerHandler := worker.NewTriggerHandler(wfRepo, subRepo, notifRepo, activityRepo, asynqClient)
-	deliveryHandler := worker.NewDeliveryHandler(wfRepo, subRepo, intgRepo, notifRepo, activityRepo, prefRepo, rlRepo, factory, asynqClient, rdb, encKey, cfg.RateLimitConfig)
+	triggerHandler := worker.NewTriggerHandler(wfRepo, subRepo, notifRepo, activityRepo, asynqClient, rdb, cfg.ActivityLogRetentionDays)
+	deliveryHandler := worker.NewDeliveryHandler(wfRepo, subRepo, intgRepo, notifRepo, activityRepo, prefRepo, rlRepo, factory, asynqClient, rdb, encKey, cfg.RateLimitConfig, cfg.ActivityLogRetentionDays)
 	delayHandler := worker.NewDelayHandler(wfRepo, asynqClient)
 	digestHandler := worker.NewDigestHandler(notifRepo, wfRepo, asynqClient, rdb)
+	broadcastHandler := worker.NewBroadcastHandler(wfRepo, subRepo, notifRepo, asynqClient)
 
 	// Asynq worker
 	srv := asynq.NewServer(
@@ -105,6 +106,7 @@ func main() {
 	mux.HandleFunc(worker.TaskTypeDelivery, deliveryHandler.ProcessTask)
 	mux.HandleFunc(worker.TaskTypeDelay, delayHandler.ProcessTask)
 	mux.HandleFunc(worker.TaskTypeDigest, digestHandler.ProcessTask)
+	mux.HandleFunc(worker.TaskTypeBroadcast, broadcastHandler.ProcessTask)
 
 	go func() {
 		log.Println("Asynq worker started")

@@ -46,5 +46,5 @@ All `/api/v1` endpoints require `Authorization: ApiKey <key>` header.
 CREDENTIALS_ENCRYPTION_KEY=<key> ./api
 
 # Docker
-docker run -p 3000:3000 --env-file .env --entrypoint /api partiri/message-in-a-bottle
+docker run -p 3000:3000 --env-file .env --entrypoint /api ghcr.io/partiri-cloud/message-in-a-bottle
 ```
