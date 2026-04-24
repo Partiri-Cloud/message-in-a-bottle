@@ -126,6 +126,100 @@ docker run -d --name redis -p 6379:6379 redis:7-alpine \
   redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru
 ```
 
+### Connecting to an external MongoDB
+
+If you already have MongoDB running — on a VM, a container cluster, or any managed cloud service — set `MONGO_URI` to point at it. The app creates its indexes automatically on startup; no manual schema setup is required.
+
+**Standard connection (no auth):**
+```
+MONGO_URI=mongodb://<host>:<port>
+```
+
+**With authentication:**
+```
+MONGO_URI=mongodb://<user>:<password>@<host>:<port>/?authSource=admin
+```
+
+**SRV record** (the format used by most managed MongoDB services):
+```
+MONGO_URI=mongodb+srv://<user>:<password>@<host>/?retryWrites=true&w=majority
+```
+
+**Replica set:**
+```
+MONGO_URI=mongodb://<host1>:27017,<host2>:27017,<host3>:27017/?replicaSet=<rs-name>
+```
+
+Replace `<host>`, `<user>`, `<password>` with your own values. Use `MONGO_DB` to set the database name (default: `message_in_a_bottle`). A replica set is recommended for production.
+
+### Connecting to an external Redis
+
+Set `REDIS_ADDR` (and optionally `REDIS_PASSWORD`) to point at any Redis instance. Redis is used only as a job queue — it is not primary storage, so it does not need persistence enabled.
+
+**Standard connection:**
+```
+REDIS_ADDR=<host>:<port>
+```
+
+**With password:**
+```
+REDIS_ADDR=<host>:<port>
+REDIS_PASSWORD=<password>
+```
+
+Recommended settings: at least 512 MB of memory, eviction policy `allkeys-lru`. These apply whether you are running Redis yourself or using a managed service.
+
+---
+
+## Deploying to the Cloud
+
+The three services are stateless and can be deployed independently on any platform that can run Docker containers. The same Docker image is used for all three; only the entrypoint differs.
+
+| Service | Entrypoint | Port | Needs public ingress? |
+|---|---|---|---|
+| API server | `/api` | 3000 | Yes |
+| WebSocket server | `/ws` | 3001 | Yes |
+| Worker | `/worker` | — | No |
+
+**Generic `docker run` examples:**
+
+```bash
+# API
+docker run -d -p 3000:3000 \
+  -e MONGO_URI=<your-mongo-uri> \
+  -e REDIS_ADDR=<host>:<port> \
+  -e ADMIN_SECRET=<secret> \
+  -e CREDENTIALS_ENCRYPTION_KEY=<key> \
+  --entrypoint /api ghcr.io/partiri-cloud/message-in-a-bottle
+
+# WebSocket
+docker run -d -p 3001:3001 \
+  -e MONGO_URI=<your-mongo-uri> \
+  -e REDIS_ADDR=<host>:<port> \
+  -e SUBSCRIBER_HMAC_SECRET=<secret> \
+  -e WS_ALLOWED_ORIGINS=https://your-app.com \
+  --entrypoint /ws ghcr.io/partiri-cloud/message-in-a-bottle
+
+# Worker (no port needed)
+docker run -d \
+  -e MONGO_URI=<your-mongo-uri> \
+  -e REDIS_ADDR=<host>:<port> \
+  -e CREDENTIALS_ENCRYPTION_KEY=<key> \
+  --entrypoint /worker ghcr.io/partiri-cloud/message-in-a-bottle
+```
+
+Or use the provided app-only Compose file, which expects `MONGO_URI` and `REDIS_ADDR` to be set in your `.env`:
+
+```bash
+docker compose -f docker-compose.app.yml up
+```
+
+**Key points:**
+- Only the API and WebSocket servers need public ingress. The Worker is a background process with no exposed port.
+- Set `WS_ALLOWED_ORIGINS` to the domain(s) of your frontend application.
+- All three services connect to the same MongoDB database and Redis instance.
+- See [Environment Variables](#environment-variables) for the full list of required and optional settings.
+
 ---
 
 ## Deployment Options

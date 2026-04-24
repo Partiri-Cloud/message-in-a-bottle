@@ -99,6 +99,14 @@ If you don't have MongoDB/Redis installed locally, you can start just those with
 task dev    # or: docker compose up -d mongo redis
 ```
 
+If you already have MongoDB and Redis running — locally or via any cloud service — skip this step and set `MONGO_URI` and `REDIS_ADDR` in your `.env` to point at your instances. The app creates its own indexes on first start; no manual schema setup is needed.
+
+To run only the app containers against external databases, use the app-only Compose file:
+
+```bash
+docker compose -f docker-compose.app.yml up
+```
+
 ### Run services separately (without Docker)
 
 Build individual binaries and run them independently. Useful when each service runs on a different host or you only need one during development.

@@ -11,10 +11,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hibiken/asynq"
-	"github.com/partiri/message-in-a-bottle/internal/config"
-	"github.com/partiri/message-in-a-bottle/internal/handler"
-	"github.com/partiri/message-in-a-bottle/internal/repository"
-	"github.com/partiri/message-in-a-bottle/internal/service"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/config"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/handler"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/repository"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/service"
 	"github.com/redis/go-redis/v9"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -96,6 +96,7 @@ func main() {
 		Notification: handler.NewNotificationHandler(notifRepo, activityRepo, subRepo),
 		Event:        handler.NewEventHandler(triggerSvc),
 		Admin:        handler.NewAdminHandler(envRepo),
+		Announcement: handler.NewAnnouncementHandler(rdb),
 	}
 
 	// Gin router
@@ -108,9 +109,7 @@ func main() {
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
-	handler.RegisterRoutes(router, handlers, envRepo, cfg.AdminSecret)
-
-	_ = rdb
+	handler.RegisterRoutes(router, handlers, envRepo, cfg.AdminSecret, cfg.SubscriberHMACSecret)
 
 	srv := &http.Server{
 		Addr:    ":" + cfg.APIPort,
