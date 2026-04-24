@@ -84,6 +84,14 @@ func SubscriberScope(hmacSecret string) gin.HandlerFunc {
 			return
 		}
 
+		if urlID := c.Param("subscriberId"); urlID != "" && urlID != payload.SubscriberID {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": gin.H{
+				"code":    "FORBIDDEN",
+				"message": "subscriber token does not match requested subscriber",
+			}})
+			return
+		}
+
 		c.Set(ContextKeySubscriberID, payload.SubscriberID)
 		c.Next()
 	}
