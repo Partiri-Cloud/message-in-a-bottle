@@ -1,6 +1,6 @@
 package engine
 
-import "github.com/partiri/message-in-a-bottle/internal/model"
+import "github.com/partiri-cloud/message-in-a-bottle/internal/model"
 
 func IsChannelEnabled(channel string, workflowPref *model.SubscriberPreference, globalPref *model.SubscriberPreference, workflowDefaults model.ChannelPrefs) bool {
 	// Priority: subscriber workflow-specific → subscriber global → workflow defaults

@@ -2,14 +2,17 @@ package engine
 
 import (
 	"bytes"
-	"html/template"
+	htmltmpl "html/template"
 	"strings"
+	texttmpl "text/template"
+
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 type TemplateData struct {
 	Subscriber TemplateSubscriber
 	Payload    map[string]any
-	Env        TemplateEnv
 }
 
 type TemplateSubscriber struct {
@@ -18,19 +21,42 @@ type TemplateSubscriber struct {
 	Email     string
 }
 
-type TemplateEnv struct {
-	Name string
-}
-
+// RenderTemplate renders using text/template (no HTML escaping). Use for SMS, push, chat, in-app.
 func RenderTemplate(tmplStr string, data TemplateData) (string, error) {
-	funcMap := template.FuncMap{
-		"upper":   strings.ToUpper,
-		"lower":   strings.ToLower,
-		"title":   strings.Title,
+	funcMap := texttmpl.FuncMap{
+		"upper": strings.ToUpper,
+		"lower": strings.ToLower,
+		"title": func(s string) string {
+			return cases.Title(language.Und).String(s)
+		},
 		"default": templateDefault,
 	}
 
-	t, err := template.New("notification").Funcs(funcMap).Parse(tmplStr)
+	t, err := texttmpl.New("notification").Funcs(funcMap).Parse(tmplStr)
+	if err != nil {
+		return "", err
+	}
+
+	var buf bytes.Buffer
+	if err := t.Execute(&buf, data); err != nil {
+		return "", err
+	}
+
+	return buf.String(), nil
+}
+
+// RenderHTMLTemplate renders using html/template (contextual HTML escaping). Use for email bodies.
+func RenderHTMLTemplate(tmplStr string, data TemplateData) (string, error) {
+	funcMap := htmltmpl.FuncMap{
+		"upper": strings.ToUpper,
+		"lower": strings.ToLower,
+		"title": func(s string) string {
+			return cases.Title(language.Und).String(s)
+		},
+		"default": templateDefault,
+	}
+
+	t, err := htmltmpl.New("notification").Funcs(funcMap).Parse(tmplStr)
 	if err != nil {
 		return "", err
 	}

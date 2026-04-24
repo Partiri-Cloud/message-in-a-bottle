@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/partiri/message-in-a-bottle/internal/model"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/model"
 )
 
 type PlannedStep struct {
@@ -124,9 +124,9 @@ func resolveStepField(path string, notification *model.Notification) any {
 func compareValues(actual any, operator string, expected any) bool {
 	switch operator {
 	case "eq":
-		return fmt.Sprintf("%v", actual) == fmt.Sprintf("%v", expected)
+		return compareEqual(actual, expected)
 	case "ne":
-		return fmt.Sprintf("%v", actual) != fmt.Sprintf("%v", expected)
+		return !compareEqual(actual, expected)
 	case "contains":
 		return strings.Contains(fmt.Sprintf("%v", actual), fmt.Sprintf("%v", expected))
 	case "in":
@@ -147,6 +147,66 @@ func compareValues(actual any, operator string, expected any) bool {
 			}
 		}
 		return true
+	case "gt":
+		a, b, ok := toFloat(actual, expected)
+		return ok && a > b
+	case "gte":
+		a, b, ok := toFloat(actual, expected)
+		return ok && a >= b
+	case "lt":
+		a, b, ok := toFloat(actual, expected)
+		return ok && a < b
+	case "lte":
+		a, b, ok := toFloat(actual, expected)
+		return ok && a <= b
 	}
 	return false
+}
+
+func toFloat(a, b any) (float64, float64, bool) {
+	af, aok := toFloatVal(a)
+	bf, bok := toFloatVal(b)
+	return af, bf, aok && bok
+}
+
+func compareEqual(actual, expected any) bool {
+	if actual == nil && expected == nil {
+		return true
+	}
+	if actual == nil || expected == nil {
+		return false
+	}
+	// Boolean comparison: require both sides to be bool.
+	ab, aIsBool := actual.(bool)
+	eb, eIsBool := expected.(bool)
+	if aIsBool || eIsBool {
+		return aIsBool && eIsBool && ab == eb
+	}
+	// Numeric comparison: if both sides parse as numbers, compare numerically.
+	af, aok := toFloatVal(actual)
+	ef, eok := toFloatVal(expected)
+	if aok && eok {
+		return af == ef
+	}
+	// Fall back to string representation for everything else.
+	return fmt.Sprintf("%v", actual) == fmt.Sprintf("%v", expected)
+}
+
+func toFloatVal(v any) (float64, bool) {
+	switch n := v.(type) {
+	case int:
+		return float64(n), true
+	case int64:
+		return float64(n), true
+	case float32:
+		return float64(n), true
+	case float64:
+		return n, true
+	case string:
+		var f float64
+		if _, err := fmt.Sscanf(n, "%f", &f); err == nil {
+			return f, true
+		}
+	}
+	return 0, false
 }
