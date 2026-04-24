@@ -10,7 +10,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
-	"github.com/partiri/message-in-a-bottle/internal/repository"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/repository"
 )
 
 type DigestHandler struct {
@@ -40,8 +40,9 @@ func (h *DigestHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 		return fmt.Errorf("unmarshal digest payload: %w", err)
 	}
 
-	// Collect digested notification IDs from Redis list
-	digestKey := fmt.Sprintf("digest:%s:%s:%s:%s", payload.EnvironmentID, payload.WorkflowID, payload.SubscriberID, payload.DigestKey)
+	// Collect digested notification IDs from Redis list.
+	// Key format must match the one used in trigger_handler.go enqueueDigest.
+	digestKey := fmt.Sprintf("digest:%s:%s:%d:%s:%s", payload.EnvironmentID, payload.WorkflowID, payload.StepIndex, payload.SubscriberID, payload.DigestKey)
 	notifIDs, err := h.rdb.LRange(ctx, digestKey, 0, -1).Result()
 	if err != nil {
 		return fmt.Errorf("lrange digest key: %w", err)
@@ -53,7 +54,10 @@ func (h *DigestHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 	}
 
 	// Load workflow for subsequent steps
-	wfID, _ := bson.ObjectIDFromHex(payload.WorkflowID)
+	wfID, err := bson.ObjectIDFromHex(payload.WorkflowID)
+	if err != nil {
+		return fmt.Errorf("invalid workflowId %q: %w", payload.WorkflowID, err)
+	}
 	wf, err := h.wfRepo.FindByID(ctx, wfID)
 	if err != nil {
 		return fmt.Errorf("find workflow: %w", err)
@@ -85,7 +89,11 @@ func (h *DigestHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 			Payload:        map[string]any{"digestCount": len(notifIDs), "digestedIds": notifIDs},
 			Attempt:        0,
 		}
-		data, _ := json.Marshal(dp)
+		data, merr := json.Marshal(dp)
+		if merr != nil {
+			log.Printf("failed to marshal post-digest delivery step %d: %v", i, merr)
+			continue
+		}
 		task := asynq.NewTask(TaskTypeDelivery, data)
 		if _, err := h.asynq.Enqueue(task); err != nil {
 			log.Printf("failed to enqueue post-digest delivery step %d: %v", i, err)
