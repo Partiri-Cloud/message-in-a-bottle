@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/partiri/message-in-a-bottle/internal/model"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/model"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -76,6 +76,24 @@ func (r *IntegrationRepository) FindPrimaryByChannel(ctx context.Context, envID 
 		return nil, err
 	}
 	return &intg, nil
+}
+
+func (r *IntegrationRepository) FindAllActiveByChannel(ctx context.Context, envID bson.ObjectID, channel string) ([]model.Integration, error) {
+	cursor, err := r.col.Find(ctx, bson.M{
+		"environmentId": envID,
+		"channel":       channel,
+		"isActive":      true,
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var integrations []model.Integration
+	if err := cursor.All(ctx, &integrations); err != nil {
+		return nil, err
+	}
+	return integrations, nil
 }
 
 func (r *IntegrationRepository) Update(ctx context.Context, envID, id bson.ObjectID, intg *model.Integration) error {
