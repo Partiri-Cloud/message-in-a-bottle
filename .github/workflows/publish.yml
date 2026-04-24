@@ -57,7 +57,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           registry-url: https://npm.pkg.github.com
           cache: npm
           cache-dependency-path: packages/sdk/package-lock.json
@@ -75,7 +75,7 @@ jobs:
           npm version "${BASE_VERSION}-dev.${SHORT_SHA}" --no-git-tag-version
           npm publish --tag dev
 
-      - name: Publish release
+      - name: Publish release to GitHub Packages
         if: github.ref == 'refs/heads/master'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -84,3 +84,20 @@ jobs:
           VERSION=$(node -p "require('./package.json').version")
           npm view "${PACKAGE_NAME}@${VERSION}" version 2>/dev/null && echo "Version ${VERSION} already published, skipping" && exit 0
           npm publish
+
+      - name: Publish release to npm
+        if: github.ref == 'refs/heads/master'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: npm publish
+        if: github.ref == 'refs/heads/master'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
+          VERSION=$(node -p "require('./package.json').version")
+          npm view "${PACKAGE_NAME}@${VERSION}" version 2>/dev/null && echo "Version ${VERSION} already published, skipping" && exit 0
+          npm publish --access public
