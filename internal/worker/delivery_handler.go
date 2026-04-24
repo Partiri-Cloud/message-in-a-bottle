@@ -8,29 +8,30 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
-	"github.com/partiri/message-in-a-bottle/internal/config"
-	"github.com/partiri/message-in-a-bottle/internal/engine"
-	"github.com/partiri/message-in-a-bottle/internal/model"
-	"github.com/partiri/message-in-a-bottle/internal/provider"
-	"github.com/partiri/message-in-a-bottle/internal/repository"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/config"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/engine"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/model"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/provider"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/repository"
 	"github.com/redis/go-redis/v9"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
 type DeliveryHandler struct {
-	wfRepo       *repository.WorkflowRepository
-	subRepo      *repository.SubscriberRepository
-	intgRepo     *repository.IntegrationRepository
-	notifRepo    *repository.NotificationRepository
-	activityRepo *repository.ActivityRepository
-	prefRepo     *repository.PreferenceRepository
-	rlRepo       *repository.RateLimitRepository
-	factory      *provider.ProviderFactory
-	asynq        *asynq.Client
-	rdb          *redis.Client
-	encKey       []byte
-	rlConfig     map[string]config.RateLimitChannelConfig
+	wfRepo        *repository.WorkflowRepository
+	subRepo       *repository.SubscriberRepository
+	intgRepo      *repository.IntegrationRepository
+	notifRepo     *repository.NotificationRepository
+	activityRepo  *repository.ActivityRepository
+	prefRepo      *repository.PreferenceRepository
+	rlRepo        *repository.RateLimitRepository
+	factory       *provider.ProviderFactory
+	asynq         *asynq.Client
+	rdb           *redis.Client
+	encKey        []byte
+	rlConfig      map[string]config.RateLimitChannelConfig
+	retentionDays int
 }
 
 func NewDeliveryHandler(
@@ -46,20 +47,22 @@ func NewDeliveryHandler(
 	rdb *redis.Client,
 	encKey []byte,
 	rlConfig map[string]config.RateLimitChannelConfig,
+	retentionDays int,
 ) *DeliveryHandler {
 	return &DeliveryHandler{
-		wfRepo:       wfRepo,
-		subRepo:      subRepo,
-		intgRepo:     intgRepo,
-		notifRepo:    notifRepo,
-		activityRepo: activityRepo,
-		prefRepo:     prefRepo,
-		rlRepo:       rlRepo,
-		factory:      factory,
-		asynq:        asynqClient,
-		rdb:          rdb,
-		encKey:       encKey,
-		rlConfig:     rlConfig,
+		wfRepo:        wfRepo,
+		subRepo:       subRepo,
+		intgRepo:      intgRepo,
+		notifRepo:     notifRepo,
+		activityRepo:  activityRepo,
+		prefRepo:      prefRepo,
+		rlRepo:        rlRepo,
+		factory:       factory,
+		asynq:         asynqClient,
+		rdb:           rdb,
+		encKey:        encKey,
+		rlConfig:      rlConfig,
+		retentionDays: retentionDays,
 	}
 }
 
@@ -69,9 +72,18 @@ func (h *DeliveryHandler) ProcessTask(ctx context.Context, t *asynq.Task) error 
 		return fmt.Errorf("unmarshal delivery payload: %w", err)
 	}
 
-	envID, _ := bson.ObjectIDFromHex(payload.EnvironmentID)
-	subID, _ := bson.ObjectIDFromHex(payload.SubscriberID)
-	notifID, _ := bson.ObjectIDFromHex(payload.NotificationID)
+	envID, err := bson.ObjectIDFromHex(payload.EnvironmentID)
+	if err != nil {
+		return fmt.Errorf("invalid environmentId %q: %w", payload.EnvironmentID, err)
+	}
+	subID, err := bson.ObjectIDFromHex(payload.SubscriberID)
+	if err != nil {
+		return fmt.Errorf("invalid subscriberId %q: %w", payload.SubscriberID, err)
+	}
+	notifID, err := bson.ObjectIDFromHex(payload.NotificationID)
+	if err != nil {
+		return fmt.Errorf("invalid notificationId %q: %w", payload.NotificationID, err)
+	}
 
 	// Load subscriber
 	subscriber, err := h.subRepo.FindByID(ctx, subID)
@@ -119,7 +131,12 @@ func (h *DeliveryHandler) ProcessTask(ctx context.Context, t *asynq.Task) error 
 		return h.deliverInApp(ctx, envID, notifID, subID, notif, subscriber, wf, payload)
 	}
 
-	// Load integration
+	// Push requires special handling: one or two providers (FCM + APNS), multiple tokens each
+	if payload.Channel == "push" {
+		return h.deliverPush(ctx, envID, notifID, subID, subscriber, wf, payload)
+	}
+
+	// All other channels: single primary integration
 	intg, err := h.intgRepo.FindPrimaryByChannel(ctx, envID, payload.Channel)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
@@ -130,31 +147,31 @@ func (h *DeliveryHandler) ProcessTask(ctx context.Context, t *asynq.Task) error 
 		return fmt.Errorf("find integration: %w", err)
 	}
 
-	// Create provider
 	prov, err := h.factory.Create(intg, h.encKey)
 	if err != nil {
 		return fmt.Errorf("create provider: %w", err)
 	}
 
-	// Render template
 	step := wf.Steps[payload.StepIndex]
 	sendOpts := h.buildSendOptions(subscriber, step, payload.Payload, subscriber.Locale)
 
 	h.logActivity(ctx, envID, notifID, subID, payload.Channel, "provider_request", map[string]any{"providerId": intg.ProviderID})
 
-	// Send
 	result, err := prov.Send(ctx, sendOpts)
 	if err != nil {
 		h.logActivity(ctx, envID, notifID, subID, payload.Channel, "provider_error", map[string]any{"error": err.Error()})
 
-		// Retry logic
 		if payload.Attempt < MaxRetries {
 			payload.Attempt++
 			backoff := time.Duration(BackoffBaseMs) * time.Millisecond
 			for i := 0; i < payload.Attempt; i++ {
 				backoff *= time.Duration(BackoffMultiplier)
 			}
-			data, _ := json.Marshal(payload)
+			data, merr := json.Marshal(payload)
+			if merr != nil {
+				log.Printf("marshal retry payload: %v", merr)
+				return nil
+			}
 			task := asynq.NewTask(TaskTypeDelivery, data)
 			h.asynq.Enqueue(task, asynq.ProcessIn(backoff))
 			h.logActivity(ctx, envID, notifID, subID, payload.Channel, "retry_scheduled", map[string]any{"attempt": payload.Attempt})
@@ -170,7 +187,6 @@ func (h *DeliveryHandler) ProcessTask(ctx context.Context, t *asynq.Task) error 
 		return nil
 	}
 
-	// Success
 	now := time.Now()
 	h.notifRepo.UpdateChannelStatus(ctx, notifID, payload.Channel, "sent", bson.M{
 		"providerMessageId": result.ProviderMessageID,
@@ -184,8 +200,87 @@ func (h *DeliveryHandler) ProcessTask(ctx context.Context, t *asynq.Task) error 
 	return nil
 }
 
+// deliverPush sends to all FCM and APNS tokens registered on the subscriber.
+// It loads push integrations by provider ID so both can coexist in the same environment.
+func (h *DeliveryHandler) deliverPush(ctx context.Context, envID, notifID, subID bson.ObjectID, sub *model.Subscriber, wf *model.Workflow, payload DeliveryPayload) error {
+	integrations, err := h.intgRepo.FindAllActiveByChannel(ctx, envID, "push")
+	if err != nil {
+		return fmt.Errorf("find push integrations: %w", err)
+	}
+
+	var fcmIntg, apnsIntg *model.Integration
+	for i := range integrations {
+		switch integrations[i].ProviderID {
+		case "fcm":
+			fcmIntg = &integrations[i]
+		case "apns":
+			apnsIntg = &integrations[i]
+		}
+	}
+
+	if fcmIntg == nil && apnsIntg == nil {
+		h.logActivity(ctx, envID, notifID, subID, "push", "provider_error", map[string]any{"error": "no push integration configured"})
+		h.notifRepo.UpdateChannelStatus(ctx, notifID, "push", "failed", bson.M{"errorMessage": "no push integration configured"})
+		return nil
+	}
+
+	step := wf.Steps[payload.StepIndex]
+	baseOpts := h.buildPushOptions(sub, step, payload.Payload, sub.Locale)
+
+	anySent := false
+
+	// Send to FCM tokens
+	if fcmIntg != nil && len(sub.Channels.Push.FCMTokens) > 0 {
+		fcmProv, err := h.factory.Create(fcmIntg, h.encKey)
+		if err != nil {
+			log.Printf("create FCM provider: %v", err)
+		} else {
+			for _, token := range sub.Channels.Push.FCMTokens {
+				opts := baseOpts
+				opts.To = token
+				h.logActivity(ctx, envID, notifID, subID, "push", "provider_request", map[string]any{"providerId": "fcm", "token": token})
+				result, err := fcmProv.Send(ctx, opts)
+				if err != nil {
+					h.logActivity(ctx, envID, notifID, subID, "push", "provider_error", map[string]any{"providerId": "fcm", "token": token, "error": err.Error()})
+				} else {
+					h.logActivity(ctx, envID, notifID, subID, "push", "provider_success", map[string]any{"providerId": "fcm", "providerMessageId": result.ProviderMessageID})
+					anySent = true
+				}
+			}
+		}
+	}
+
+	// Send to APNS tokens
+	if apnsIntg != nil && len(sub.Channels.Push.APNSTokens) > 0 {
+		apnsProv, err := h.factory.Create(apnsIntg, h.encKey)
+		if err != nil {
+			log.Printf("create APNS provider: %v", err)
+		} else {
+			for _, token := range sub.Channels.Push.APNSTokens {
+				opts := baseOpts
+				opts.To = token
+				h.logActivity(ctx, envID, notifID, subID, "push", "provider_request", map[string]any{"providerId": "apns", "token": token})
+				result, err := apnsProv.Send(ctx, opts)
+				if err != nil {
+					h.logActivity(ctx, envID, notifID, subID, "push", "provider_error", map[string]any{"providerId": "apns", "token": token, "error": err.Error()})
+				} else {
+					h.logActivity(ctx, envID, notifID, subID, "push", "provider_success", map[string]any{"providerId": "apns", "providerMessageId": result.ProviderMessageID})
+					anySent = true
+				}
+			}
+		}
+	}
+
+	now := time.Now()
+	if anySent {
+		h.notifRepo.UpdateChannelStatus(ctx, notifID, "push", "sent", bson.M{"sentAt": now})
+	} else {
+		h.notifRepo.UpdateChannelStatus(ctx, notifID, "push", "failed", bson.M{"errorMessage": "all push deliveries failed", "failedAt": now})
+	}
+	return nil
+}
+
 func (h *DeliveryHandler) deliverInApp(ctx context.Context, envID, notifID, subID bson.ObjectID, notif *model.Notification, sub *model.Subscriber, wf *model.Workflow, payload DeliveryPayload) error {
-	// Render content
 	step := wf.Steps[payload.StepIndex]
 	data := engine.TemplateData{
 		Subscriber: engine.TemplateSubscriber{
@@ -208,11 +303,9 @@ func (h *DeliveryHandler) deliverInApp(ctx context.Context, envID, notifID, subI
 		}
 	}
 
-	// Update notification status
 	now := time.Now()
 	h.notifRepo.UpdateChannelStatus(ctx, notifID, "in_app", "sent", bson.M{"sentAt": now})
 
-	// Publish to Redis for WS delivery
 	wsMsg, _ := json.Marshal(map[string]any{
 		"room":  fmt.Sprintf("env:%s:sub:%s", envID.Hex(), subID.Hex()),
 		"event": "notification:new",
@@ -229,6 +322,38 @@ func (h *DeliveryHandler) deliverInApp(ctx context.Context, envID, notifID, subI
 	return nil
 }
 
+// buildPushOptions renders the template fields for push without setting To (set per-token by the caller).
+func (h *DeliveryHandler) buildPushOptions(sub *model.Subscriber, step model.WorkflowStep, payload map[string]any, locale string) provider.SendOptions {
+	data := engine.TemplateData{
+		Subscriber: engine.TemplateSubscriber{
+			FirstName: sub.FirstName,
+			LastName:  sub.LastName,
+			Email:     sub.Email,
+		},
+		Payload: payload,
+	}
+	opts := provider.SendOptions{Metadata: make(map[string]any)}
+	if step.Template != nil {
+		if step.Template.Subject != nil {
+			tmplStr := engine.ResolveLocale(step.Template.Subject, locale, "en")
+			if rendered, err := engine.RenderTemplate(tmplStr, data); err == nil {
+				opts.Subject = rendered
+			} else {
+				opts.Subject = tmplStr
+			}
+		}
+		if step.Template.Body != nil {
+			tmplStr := engine.ResolveLocale(step.Template.Body, locale, "en")
+			if rendered, err := engine.RenderTemplate(tmplStr, data); err == nil {
+				opts.Content = rendered
+			} else {
+				opts.Content = tmplStr
+			}
+		}
+	}
+	return opts
+}
+
 func (h *DeliveryHandler) buildSendOptions(sub *model.Subscriber, step model.WorkflowStep, payload map[string]any, locale string) provider.SendOptions {
 	data := engine.TemplateData{
 		Subscriber: engine.TemplateSubscriber{
@@ -239,6 +364,12 @@ func (h *DeliveryHandler) buildSendOptions(sub *model.Subscriber, step model.Wor
 		Payload: payload,
 	}
 
+	// Email uses HTML-safe rendering; all other channels use plain text.
+	render := engine.RenderTemplate
+	if step.Type == "email" {
+		render = engine.RenderHTMLTemplate
+	}
+
 	opts := provider.SendOptions{
 		Metadata: make(map[string]any),
 	}
@@ -246,7 +377,7 @@ func (h *DeliveryHandler) buildSendOptions(sub *model.Subscriber, step model.Wor
 	if step.Template != nil {
 		if step.Template.Subject != nil {
 			tmplStr := engine.ResolveLocale(step.Template.Subject, locale, "en")
-			rendered, err := engine.RenderTemplate(tmplStr, data)
+			rendered, err := render(tmplStr, data)
 			if err == nil {
 				opts.Subject = rendered
 			} else {
@@ -255,7 +386,7 @@ func (h *DeliveryHandler) buildSendOptions(sub *model.Subscriber, step model.Wor
 		}
 		if step.Template.Body != nil {
 			tmplStr := engine.ResolveLocale(step.Template.Body, locale, "en")
-			rendered, err := engine.RenderTemplate(tmplStr, data)
+			rendered, err := render(tmplStr, data)
 			if err == nil {
 				opts.Content = rendered
 			} else {
@@ -264,7 +395,7 @@ func (h *DeliveryHandler) buildSendOptions(sub *model.Subscriber, step model.Wor
 		}
 		if step.Template.Content != nil {
 			tmplStr := engine.ResolveLocale(step.Template.Content, locale, "en")
-			rendered, err := engine.RenderTemplate(tmplStr, data)
+			rendered, err := render(tmplStr, data)
 			if err == nil {
 				opts.Content = rendered
 			} else {
@@ -273,17 +404,11 @@ func (h *DeliveryHandler) buildSendOptions(sub *model.Subscriber, step model.Wor
 		}
 	}
 
-	// Resolve "to" based on channel
 	switch step.Type {
 	case "email":
 		opts.To = sub.Email
 	case "sms":
 		opts.To = sub.Phone
-	case "push":
-		// Use first FCM token
-		if len(sub.Channels.Push.FCMTokens) > 0 {
-			opts.To = sub.Channels.Push.FCMTokens[0]
-		}
 	case "slack":
 		opts.To = sub.Channels.Slack.WebhookURL
 	case "ms_teams":
@@ -301,6 +426,6 @@ func (h *DeliveryHandler) logActivity(ctx context.Context, envID, notifID, subID
 		Channel:        channel,
 		Event:          event,
 		Detail:         detail,
-		ExpireAt:       time.Now().Add(30 * 24 * time.Hour),
+		ExpireAt:       time.Now().Add(time.Duration(h.retentionDays) * 24 * time.Hour),
 	})
 }
