@@ -4,9 +4,9 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/partiri/message-in-a-bottle/internal/handler/dto"
-	"github.com/partiri/message-in-a-bottle/internal/middleware"
-	"github.com/partiri/message-in-a-bottle/internal/service"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/handler/dto"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/middleware"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/service"
 )
 
 type EventHandler struct {
@@ -56,7 +56,7 @@ func (h *EventHandler) BulkTrigger(c *gin.Context) {
 	for _, event := range req.Events {
 		result, err := h.triggerSvc.Trigger(c.Request.Context(), envID, &event)
 		if err != nil {
-			results = append(results, gin.H{"error": "trigger failed"})
+			results = append(results, gin.H{"error": gin.H{"code": "TRIGGER_FAILED", "message": err.Error()}})
 			continue
 		}
 		results = append(results, result)

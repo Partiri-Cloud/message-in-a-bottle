@@ -5,11 +5,11 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/partiri/message-in-a-bottle/internal/crypto"
-	"github.com/partiri/message-in-a-bottle/internal/handler/dto"
-	"github.com/partiri/message-in-a-bottle/internal/middleware"
-	"github.com/partiri/message-in-a-bottle/internal/model"
-	"github.com/partiri/message-in-a-bottle/internal/repository"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/crypto"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/handler/dto"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/middleware"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/model"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/repository"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
@@ -89,6 +89,29 @@ func (h *IntegrationHandler) List(c *gin.Context) {
 	})
 }
 
+func (h *IntegrationHandler) Get(c *gin.Context) {
+	id, err := bson.ObjectIDFromHex(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "VALIDATION_ERROR", "message": "invalid integration ID"}})
+		return
+	}
+
+	envID := middleware.GetEnvironmentID(c)
+
+	intg, err := h.intgRepo.FindByID(c.Request.Context(), envID, id)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "integration not found"}})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		return
+	}
+
+	intg.Credentials = nil
+	c.JSON(http.StatusOK, gin.H{"data": intg})
+}
+
 func (h *IntegrationHandler) Update(c *gin.Context) {
 	id, err := bson.ObjectIDFromHex(c.Param("id"))
 	if err != nil {
@@ -127,7 +150,11 @@ func (h *IntegrationHandler) Update(c *gin.Context) {
 		intg.Metadata.SenderEmail = req.Metadata.SenderEmail
 	}
 	if req.Credentials != nil {
-		credJSON, _ := json.Marshal(req.Credentials)
+		credJSON, err := json.Marshal(req.Credentials)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "VALIDATION_ERROR", "message": "invalid credentials"}})
+			return
+		}
 		encrypted, err := crypto.Encrypt(credJSON, h.encryptionKey)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "failed to encrypt credentials"}})

@@ -2,8 +2,8 @@ package handler
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/partiri/message-in-a-bottle/internal/middleware"
-	"github.com/partiri/message-in-a-bottle/internal/repository"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/middleware"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/repository"
 )
 
 type Handlers struct {
@@ -16,9 +16,13 @@ type Handlers struct {
 	Notification *NotificationHandler
 	Event        *EventHandler
 	Admin        *AdminHandler
+	Announcement *AnnouncementHandler
 }
 
-func RegisterRoutes(router *gin.Engine, h *Handlers, envRepo *repository.EnvironmentRepository, adminSecret string) {
+func RegisterRoutes(router *gin.Engine, h *Handlers, envRepo *repository.EnvironmentRepository, adminSecret, subscriberHMACSecret string) {
+	// Public routes (no auth required)
+	router.GET("/api/v1/announcements/active", h.Announcement.Active)
+
 	// Admin routes (protected by admin secret, no API key required)
 	admin := router.Group("/admin")
 	admin.Use(middleware.AdminSecretAuth(adminSecret))
@@ -26,6 +30,10 @@ func RegisterRoutes(router *gin.Engine, h *Handlers, envRepo *repository.Environ
 		admin.POST("/environments", h.Admin.CreateEnvironment)
 		admin.GET("/environments", h.Admin.ListEnvironments)
 		admin.POST("/environments/:identifier/keys", h.Admin.AddAPIKey)
+		admin.GET("/announcements", h.Announcement.List)
+		admin.POST("/announcements", h.Announcement.Create)
+		admin.PATCH("/announcements/:id", h.Announcement.Update)
+		admin.DELETE("/announcements/:id", h.Announcement.Delete)
 	}
 
 	api := router.Group("/api/v1")
@@ -34,24 +42,25 @@ func RegisterRoutes(router *gin.Engine, h *Handlers, envRepo *repository.Environ
 	// Subscribers
 	sub := api.Group("/subscribers")
 	{
+		// Server-side subscriber management (API key only)
 		sub.POST("", middleware.RequirePermission("subscribers:write"), h.Subscriber.Create)
 		sub.POST("/bulk", middleware.RequirePermission("subscribers:write"), h.Subscriber.BulkCreate)
 		sub.GET("/:subscriberId", middleware.RequirePermission("subscribers:read"), h.Subscriber.Get)
 		sub.PATCH("/:subscriberId", middleware.RequirePermission("subscribers:write"), h.Subscriber.Update)
 		sub.DELETE("/:subscriberId", middleware.RequirePermission("subscribers:write"), h.Subscriber.Delete)
 
-		// Subscriber preferences
-		sub.GET("/:subscriberId/preferences", middleware.RequirePermission("preferences:read"), h.Preference.GetAll)
-		sub.PATCH("/:subscriberId/preferences", middleware.RequirePermission("preferences:write"), h.Preference.UpdateGlobal)
-		sub.PATCH("/:subscriberId/preferences/:workflowId", middleware.RequirePermission("preferences:write"), h.Preference.UpdateWorkflow)
-
-		// Subscriber feed
-		sub.GET("/:subscriberId/feed", middleware.RequirePermission("notifications:read"), h.Notification.Feed)
-		sub.GET("/:subscriberId/feed/unseen-count", middleware.RequirePermission("notifications:read"), h.Notification.UnseenCount)
-		sub.POST("/:subscriberId/feed/:notifId/seen", middleware.RequirePermission("notifications:read"), h.Notification.MarkSeen)
-		sub.POST("/:subscriberId/feed/:notifId/read", middleware.RequirePermission("notifications:read"), h.Notification.MarkRead)
-		sub.POST("/:subscriberId/feed/:notifId/archive", middleware.RequirePermission("notifications:read"), h.Notification.Archive)
-		sub.POST("/:subscriberId/feed/bulk-action", middleware.RequirePermission("notifications:read"), h.Notification.BulkAction)
+		// Subscriber-facing routes: require a valid subscriber token in addition to the API key.
+		// The token is validated against the URL's :subscriberId to prevent cross-subscriber access.
+		scoped := sub.Group("/:subscriberId", middleware.SubscriberScope(subscriberHMACSecret))
+		scoped.GET("/preferences", middleware.RequirePermission("preferences:read"), h.Preference.GetAll)
+		scoped.PATCH("/preferences", middleware.RequirePermission("preferences:write"), h.Preference.UpdateGlobal)
+		scoped.PATCH("/preferences/:workflowId", middleware.RequirePermission("preferences:write"), h.Preference.UpdateWorkflow)
+		scoped.GET("/feed", middleware.RequirePermission("notifications:read"), h.Notification.Feed)
+		scoped.GET("/feed/unseen-count", middleware.RequirePermission("notifications:read"), h.Notification.UnseenCount)
+		scoped.POST("/feed/:notifId/seen", middleware.RequirePermission("notifications:read"), h.Notification.MarkSeen)
+		scoped.POST("/feed/:notifId/read", middleware.RequirePermission("notifications:read"), h.Notification.MarkRead)
+		scoped.POST("/feed/:notifId/archive", middleware.RequirePermission("notifications:read"), h.Notification.Archive)
+		scoped.POST("/feed/bulk-action", middleware.RequirePermission("notifications:read"), h.Notification.BulkAction)
 	}
 
 	// Topics
@@ -83,6 +92,7 @@ func RegisterRoutes(router *gin.Engine, h *Handlers, envRepo *repository.Environ
 	{
 		intg.POST("", middleware.RequirePermission("integrations:write"), h.Integration.Create)
 		intg.GET("", middleware.RequirePermission("integrations:read"), h.Integration.List)
+		intg.GET("/:id", middleware.RequirePermission("integrations:read"), h.Integration.Get)
 		intg.PUT("/:id", middleware.RequirePermission("integrations:write"), h.Integration.Update)
 		intg.DELETE("/:id", middleware.RequirePermission("integrations:write"), h.Integration.Delete)
 		intg.PATCH("/:id/primary", middleware.RequirePermission("integrations:write"), h.Integration.SetPrimary)
