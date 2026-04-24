@@ -43,3 +43,9 @@ docker-compose.override.yml
 # Build / temp
 /tmp/
 *.log
+
+# Claude Code
+.claude/
+
+# Task runner cache
+.task/
