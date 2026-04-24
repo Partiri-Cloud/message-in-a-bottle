@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
-	"github.com/partiri/message-in-a-bottle/internal/handler/dto"
-	"github.com/partiri/message-in-a-bottle/internal/model"
-	"github.com/partiri/message-in-a-bottle/internal/repository"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/handler/dto"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/model"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/repository"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
@@ -20,15 +21,27 @@ var (
 	ErrWorkflowNotFound     = errors.New("workflow not found")
 )
 
-const TaskTypeTrigger = "task:trigger"
+const (
+	TaskTypeTrigger   = "task:trigger"
+	TaskTypeBroadcast = "task:broadcast"
+)
 
 type TriggerPayload struct {
-	EnvironmentID string         `json:"environmentId"`
-	WorkflowID    string         `json:"workflowId"`
-	SubscriberIDs []string       `json:"subscriberIds"`
-	Payload       map[string]any `json:"payload"`
-	TransactionID string         `json:"transactionId"`
-	Overrides     map[string]any `json:"overrides,omitempty"`
+	EnvironmentID string            `json:"environmentId"`
+	WorkflowID    string            `json:"workflowId"`
+	SubscriberIDs map[string]string `json:"subscriberIds"` // subscriberID hex → notificationID hex
+	Payload       map[string]any    `json:"payload"`
+	TransactionID string            `json:"transactionId"`
+	Overrides     map[string]any    `json:"overrides,omitempty"`
+}
+
+type BroadcastTaskPayload struct {
+	EnvironmentID      string         `json:"environmentId"`
+	WorkflowIdentifier string         `json:"workflowIdentifier"`
+	Payload            map[string]any `json:"payload"`
+	TransactionID      string         `json:"transactionId"`
+	Overrides          map[string]any `json:"overrides,omitempty"`
+	RetentionDays      int            `json:"retentionDays"`
 }
 
 type TriggerResult struct {
@@ -82,24 +95,16 @@ func (s *TriggerService) Trigger(ctx context.Context, envID bson.ObjectID, req *
 		txID = uuid.New().String()
 	}
 
-	// Check idempotency
-	_, err = s.notifRepo.FindByTransactionID(ctx, envID, txID)
-	if err == nil {
-		return nil, ErrDuplicateTransaction
-	}
-	if err != mongo.ErrNoDocuments {
-		return nil, err
-	}
-
 	// Resolve subscriber IDs
 	subscriberIDs, err := s.resolveRecipients(ctx, envID, req.To)
 	if err != nil {
 		return nil, err
 	}
 
-	// Create notifications and enqueue
+	// Create notifications and enqueue. The unique index on {environmentId, transactionId, subscriberId}
+	// is the authoritative idempotency guard — no separate pre-check needed.
 	var notifIDs []string
-	var allSubIDStrings []string
+	notifIDMap := make(map[string]string, len(subscriberIDs))
 	for _, subID := range subscriberIDs {
 		channels := make([]model.ChannelDelivery, 0)
 		for _, step := range wf.Steps {
@@ -130,20 +135,23 @@ func (s *TriggerService) Trigger(ctx context.Context, envID bson.ObjectID, req *
 		}
 
 		notifIDs = append(notifIDs, notif.ID.Hex())
-		allSubIDStrings = append(allSubIDStrings, subID.Hex())
+		notifIDMap[subID.Hex()] = notif.ID.Hex()
 	}
 
 	// Enqueue trigger task
 	payload := TriggerPayload{
 		EnvironmentID: envID.Hex(),
 		WorkflowID:    wf.ID.Hex(),
-		SubscriberIDs: allSubIDStrings,
+		SubscriberIDs: notifIDMap,
 		Payload:       req.Payload,
 		TransactionID: txID,
 		Overrides:     req.Overrides,
 	}
 
-	data, _ := json.Marshal(payload)
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("marshal trigger payload: %w", err)
+	}
 	task := asynq.NewTask(TaskTypeTrigger, data)
 	if _, err := s.asynq.Enqueue(task); err != nil {
 		return nil, err
@@ -156,32 +164,29 @@ func (s *TriggerService) Trigger(ctx context.Context, envID bson.ObjectID, req *
 }
 
 func (s *TriggerService) Broadcast(ctx context.Context, envID bson.ObjectID, req *dto.BroadcastRequest) (*TriggerResult, error) {
-	triggerReq := &dto.TriggerRequest{
+	txID := req.TransactionID
+	if txID == "" {
+		txID = uuid.New().String()
+	}
+
+	bp := BroadcastTaskPayload{
+		EnvironmentID:      envID.Hex(),
 		WorkflowIdentifier: req.WorkflowIdentifier,
 		Payload:            req.Payload,
-		TransactionID:      req.TransactionID,
+		TransactionID:      txID,
 		Overrides:          req.Overrides,
+		RetentionDays:      s.retention,
+	}
+	data, err := json.Marshal(bp)
+	if err != nil {
+		return nil, fmt.Errorf("marshal broadcast payload: %w", err)
+	}
+	task := asynq.NewTask(TaskTypeBroadcast, data)
+	if _, err := s.asynq.Enqueue(task); err != nil {
+		return nil, err
 	}
 
-	// Get all subscribers (paginated fetch all)
-	page := 1
-	var allSubIDs []dto.TriggerTo
-	for {
-		subs, _, err := s.subRepo.FindMany(ctx, envID, page, 100)
-		if err != nil {
-			return nil, err
-		}
-		if len(subs) == 0 {
-			break
-		}
-		for _, sub := range subs {
-			allSubIDs = append(allSubIDs, dto.TriggerTo{SubscriberID: sub.SubscriberID})
-		}
-		page++
-	}
-
-	triggerReq.To = allSubIDs
-	return s.Trigger(ctx, envID, triggerReq)
+	return &TriggerResult{TransactionID: txID}, nil
 }
 
 func (s *TriggerService) resolveRecipients(ctx context.Context, envID bson.ObjectID, to []dto.TriggerTo) ([]bson.ObjectID, error) {
