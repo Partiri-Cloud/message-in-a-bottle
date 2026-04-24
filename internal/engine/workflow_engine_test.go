@@ -3,7 +3,7 @@ package engine
 import (
 	"testing"
 
-	"github.com/partiri/message-in-a-bottle/internal/model"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/model"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -176,6 +176,85 @@ func TestEvaluateWorkflow_MissingField(t *testing.T) {
 	}
 	result := EvaluateWorkflow(wf, &model.Subscriber{}, map[string]any{}, nil)
 	assert.True(t, result[0].Skipped)
+}
+
+func TestEvaluateWorkflow_ConditionGt(t *testing.T) {
+	wf := &model.Workflow{
+		Steps: []model.WorkflowStep{
+			{
+				Type: "email", Order: 0, DefaultEnabled: true,
+				Conditions: []model.StepCondition{
+					{Field: "payload.total", Operator: "gt", Value: float64(50)},
+				},
+			},
+		},
+	}
+	assert.False(t, EvaluateWorkflow(wf, &model.Subscriber{}, map[string]any{"total": float64(99)}, nil)[0].Skipped)
+	assert.True(t, EvaluateWorkflow(wf, &model.Subscriber{}, map[string]any{"total": float64(50)}, nil)[0].Skipped)
+	assert.True(t, EvaluateWorkflow(wf, &model.Subscriber{}, map[string]any{"total": float64(10)}, nil)[0].Skipped)
+}
+
+func TestEvaluateWorkflow_ConditionGte(t *testing.T) {
+	wf := &model.Workflow{
+		Steps: []model.WorkflowStep{
+			{
+				Type: "email", Order: 0, DefaultEnabled: true,
+				Conditions: []model.StepCondition{
+					{Field: "payload.total", Operator: "gte", Value: float64(50)},
+				},
+			},
+		},
+	}
+	assert.False(t, EvaluateWorkflow(wf, &model.Subscriber{}, map[string]any{"total": float64(50)}, nil)[0].Skipped)
+	assert.False(t, EvaluateWorkflow(wf, &model.Subscriber{}, map[string]any{"total": float64(100)}, nil)[0].Skipped)
+	assert.True(t, EvaluateWorkflow(wf, &model.Subscriber{}, map[string]any{"total": float64(49)}, nil)[0].Skipped)
+}
+
+func TestEvaluateWorkflow_ConditionLt(t *testing.T) {
+	wf := &model.Workflow{
+		Steps: []model.WorkflowStep{
+			{
+				Type: "sms", Order: 0, DefaultEnabled: true,
+				Conditions: []model.StepCondition{
+					{Field: "payload.retries", Operator: "lt", Value: float64(3)},
+				},
+			},
+		},
+	}
+	assert.False(t, EvaluateWorkflow(wf, &model.Subscriber{}, map[string]any{"retries": float64(2)}, nil)[0].Skipped)
+	assert.True(t, EvaluateWorkflow(wf, &model.Subscriber{}, map[string]any{"retries": float64(3)}, nil)[0].Skipped)
+}
+
+func TestEvaluateWorkflow_ConditionLte(t *testing.T) {
+	wf := &model.Workflow{
+		Steps: []model.WorkflowStep{
+			{
+				Type: "sms", Order: 0, DefaultEnabled: true,
+				Conditions: []model.StepCondition{
+					{Field: "payload.retries", Operator: "lte", Value: float64(3)},
+				},
+			},
+		},
+	}
+	assert.False(t, EvaluateWorkflow(wf, &model.Subscriber{}, map[string]any{"retries": float64(3)}, nil)[0].Skipped)
+	assert.False(t, EvaluateWorkflow(wf, &model.Subscriber{}, map[string]any{"retries": float64(1)}, nil)[0].Skipped)
+	assert.True(t, EvaluateWorkflow(wf, &model.Subscriber{}, map[string]any{"retries": float64(4)}, nil)[0].Skipped)
+}
+
+func TestEvaluateWorkflow_ConditionNumericString(t *testing.T) {
+	wf := &model.Workflow{
+		Steps: []model.WorkflowStep{
+			{
+				Type: "email", Order: 0, DefaultEnabled: true,
+				Conditions: []model.StepCondition{
+					{Field: "payload.score", Operator: "gt", Value: "75"},
+				},
+			},
+		},
+	}
+	// String values that parse as numbers should compare numerically
+	assert.False(t, EvaluateWorkflow(wf, &model.Subscriber{}, map[string]any{"score": "80"}, nil)[0].Skipped)
+	assert.True(t, EvaluateWorkflow(wf, &model.Subscriber{}, map[string]any{"score": "70"}, nil)[0].Skipped)
 }
 
 func TestEvaluateWorkflow_EmptySteps(t *testing.T) {
