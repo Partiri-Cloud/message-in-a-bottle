@@ -60,7 +60,9 @@ func Load() (*Config, error) {
 	cfg.RateLimitConfig = defaultRateLimits()
 	if raw := os.Getenv("RATE_LIMIT_CONFIG"); raw != "" {
 		var rl map[string]RateLimitChannelConfig
-		if err := json.Unmarshal([]byte(raw), &rl); err == nil {
+		if err := json.Unmarshal([]byte(raw), &rl); err != nil {
+			fmt.Printf("RATE_LIMIT_CONFIG parse error: %v — using defaults\n", err)
+		} else {
 			cfg.RateLimitConfig = rl
 		}
 	}

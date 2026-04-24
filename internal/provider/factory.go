@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/partiri/message-in-a-bottle/internal/crypto"
-	"github.com/partiri/message-in-a-bottle/internal/model"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/crypto"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/model"
 )
 
 type ProviderFactory struct {

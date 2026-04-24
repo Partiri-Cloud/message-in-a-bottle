@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/partiri/message-in-a-bottle/internal/model"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/model"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -82,7 +82,7 @@ func (r *EnvironmentRepository) AddAPIKey(ctx context.Context, envID bson.Object
 }
 
 func (r *EnvironmentRepository) FindAll(ctx context.Context) ([]model.Environment, error) {
-	cursor, err := r.col.Find(ctx, bson.M{}, options.Find().SetSort(bson.D{{"createdAt", 1}}))
+	cursor, err := r.col.Find(ctx, bson.M{}, options.Find().SetSort(bson.D{{Key: "createdAt", Value: 1}}))
 	if err != nil {
 		return nil, err
 	}

@@ -51,7 +51,7 @@ func EnsureIndexes(ctx context.Context, db *mongo.Database) error {
 		},
 		"notifications": {
 			{Keys: bson.D{{Key: "environmentId", Value: 1}, {Key: "subscriberId", Value: 1}, {Key: "createdAt", Value: -1}}},
-			{Keys: bson.D{{Key: "environmentId", Value: 1}, {Key: "transactionId", Value: 1}}, Options: uniqueSparse()},
+			{Keys: bson.D{{Key: "environmentId", Value: 1}, {Key: "transactionId", Value: 1}, {Key: "subscriberId", Value: 1}}, Options: uniqueSparse()},
 			{Keys: bson.D{{Key: "expireAt", Value: 1}}, Options: ttl()},
 			{Keys: bson.D{{Key: "environmentId", Value: 1}, {Key: "workflowId", Value: 1}, {Key: "createdAt", Value: -1}}},
 		},

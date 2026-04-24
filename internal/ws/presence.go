@@ -3,7 +3,7 @@ package ws
 import (
 	"context"
 
-	"github.com/partiri/message-in-a-bottle/internal/repository"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/repository"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
