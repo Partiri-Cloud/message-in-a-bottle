@@ -63,6 +63,7 @@ describe('HttpClient', () => {
 
     const [, opts] = mockFetch.mock.calls[0];
     expect(opts.method).toBe('PATCH');
+    expect(JSON.parse(opts.body)).toEqual({ channels: { email: false } });
   });
 
   it('handles error responses with JSON body', async () => {
@@ -83,6 +84,28 @@ describe('HttpClient', () => {
     });
 
     await expect(client.get('/api/v1/broken')).rejects.toThrow('HTTP 500');
+  });
+
+  it('post without body sends undefined body', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ data: {} }),
+    });
+
+    await client.post('/api/v1/subscribers/usr_1/feed/n_1/seen');
+
+    const [, opts] = mockFetch.mock.calls[0];
+    expect(opts.body).toBeUndefined();
+  });
+
+  it('handles error response with no message field falls back to HTTP status', async () => {
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 422,
+      json: () => Promise.resolve({ details: 'validation failed' }),
+    });
+
+    await expect(client.get('/api/v1/feed')).rejects.toThrow('HTTP 422');
   });
 
   it('strips trailing slash from base URL', async () => {
