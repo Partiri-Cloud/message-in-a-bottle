@@ -1015,7 +1015,7 @@ If empty, **all origins are accepted** -- this is not safe for production.
 A TypeScript client SDK is available in `packages/sdk/`. Install it in your project:
 
 ```bash
-npm install @partiri-cloud/message-in-a-bottle-sdk
+npm install @partiri/message-in-a-bottle-sdk
 ```
 
 See the [SDK README](packages/sdk/README.md) for full API reference.
