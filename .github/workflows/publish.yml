@@ -2,7 +2,7 @@ name: Publish
 
 on:
   push:
-    branches: [master, dev]
+    branches: [master]
 
 env:
   IMAGE_NAME: message-in-a-bottle

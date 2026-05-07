@@ -43,6 +43,11 @@ describe('NotificationsModule', () => {
     expect(http.get).toHaveBeenCalledWith('/api/v1/subscribers/usr_abc/feed', {});
   });
 
+  it('list passes seen filter', async () => {
+    await mod.list({ seen: false });
+    expect(http.get).toHaveBeenCalledWith('/api/v1/subscribers/usr_abc/feed', { seen: 'false' });
+  });
+
   it('markAsSeen sends HTTP and WS', async () => {
     await mod.markAsSeen('notif_123');
 

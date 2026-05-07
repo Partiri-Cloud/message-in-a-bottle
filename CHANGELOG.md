@@ -37,5 +37,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Channels: Email (SendGrid, SES, SMTP), SMS (Twilio, Vonage), Push (FCM, APNS), Chat (Slack, MS Teams), In-App (WebSocket).
 - Workflow engine with delay, digest, and conditional steps.
 - Subscriber management, topic fan-out, and preference overrides.
-- TypeScript SDK (`@partiri-cloud/message-in-a-bottle-sdk`).
+- TypeScript SDK (`@partiri/message-in-a-bottle-sdk`).
 - Docker Compose single-command local development setup.
