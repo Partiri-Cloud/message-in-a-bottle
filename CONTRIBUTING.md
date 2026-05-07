@@ -73,10 +73,10 @@ task docker      # Docker image
 
 ## Submitting Changes
 
-1. Fork the repository and create a branch from `main`.
+1. Fork the repository and create a branch from `master`.
 2. Make your changes. Add tests for new behaviour.
 3. Run `go test ./...` and ensure all tests pass.
-4. Open a pull request against `main`. Fill in the PR template.
+4. Open a pull request against `master`. Fill in the PR template.
 
 ## Reporting Issues
 

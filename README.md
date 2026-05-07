@@ -188,6 +188,7 @@ All three need `MONGO_URI`, `MONGO_DB`, `REDIS_ADDR`, and `REDIS_PASSWORD` to re
 
 | Variable                     | Description                                                                 |
 |------------------------------|-----------------------------------------------------------------------------|
+| `ADMIN_SECRET`               | Secret for `/admin/*` endpoints (environment and API key management). Generate with `openssl rand -hex 32`. |
 | `CREDENTIALS_ENCRYPTION_KEY` | AES-256-GCM key for encrypting integration credentials. 64 hex chars (32 bytes). Generate with `openssl rand -hex 32`. |
 | `SUBSCRIBER_HMAC_SECRET`     | HMAC-SHA256 secret for signing subscriber tokens. Required by the WS server. Generate with `openssl rand -hex 32`. |
 
