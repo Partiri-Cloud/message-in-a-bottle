@@ -44,11 +44,10 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
 
   publish-sdk:
-    name: Publish SDK to GitHub Packages
+    name: Publish SDK to npm
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
     defaults:
       run:
         working-directory: packages/sdk
@@ -58,40 +57,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          registry-url: https://npm.pkg.github.com
+          registry-url: https://registry.npmjs.org
           cache: npm
           cache-dependency-path: packages/sdk/package-lock.json
 
       - run: npm ci
       - run: npm run build
 
-      - name: Publish dev prerelease
-        if: github.ref == 'refs/heads/dev'
+      - name: Publish release to npm
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
-          BASE_VERSION=$(node -p "require('./package.json').version")
-          npm version "${BASE_VERSION}-dev.${SHORT_SHA}" --no-git-tag-version
-          npm publish --tag dev
-
-      - name: Publish release to GitHub Packages
-        if: github.ref == 'refs/heads/master'
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           PACKAGE_NAME=$(node -p "require('./package.json').name")
           VERSION=$(node -p "require('./package.json').version")
           npm view "${PACKAGE_NAME}@${VERSION}" version 2>/dev/null && echo "Version ${VERSION} already published, skipping" && exit 0
-          npm publish
-
-      - name: Publish release to npm
-        if: github.ref == 'refs/heads/master'
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          npm config set //registry.npmjs.org/:_authToken "${NPM_TOKEN}"
-          PACKAGE_NAME=$(node -p "require('./package.json').name")
-          VERSION=$(node -p "require('./package.json').version")
-          npm view "${PACKAGE_NAME}@${VERSION}" --registry https://registry.npmjs.org version 2>/dev/null && echo "Version ${VERSION} already published, skipping" && exit 0
-          npm publish --registry https://registry.npmjs.org --access public
+          npm publish --access public
