@@ -31,13 +31,13 @@ func (h *PreferenceHandler) GetAll(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "subscriber not found"}})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
 	prefs, err := h.prefRepo.FindBySubscriber(c.Request.Context(), envID, sub.ID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
@@ -60,7 +60,7 @@ func (h *PreferenceHandler) UpdateGlobal(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "subscriber not found"}})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
@@ -79,7 +79,7 @@ func (h *PreferenceHandler) UpdateGlobal(c *gin.Context) {
 	}
 
 	if err := h.prefRepo.Upsert(c.Request.Context(), pref); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
@@ -107,7 +107,7 @@ func (h *PreferenceHandler) UpdateWorkflow(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "subscriber not found"}})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
@@ -126,7 +126,7 @@ func (h *PreferenceHandler) UpdateWorkflow(c *gin.Context) {
 	}
 
 	if err := h.prefRepo.Upsert(c.Request.Context(), pref); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
