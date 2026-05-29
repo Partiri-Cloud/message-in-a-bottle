@@ -7,6 +7,7 @@ import (
 	"github.com/partiri-cloud/message-in-a-bottle/internal/handler/dto"
 	"github.com/partiri-cloud/message-in-a-bottle/internal/middleware"
 	"github.com/partiri-cloud/message-in-a-bottle/internal/model"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/provider"
 	"github.com/partiri-cloud/message-in-a-bottle/internal/repository"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
@@ -47,9 +48,21 @@ func (h *SubscriberHandler) Create(c *gin.Context) {
 			}
 		}
 		if req.Channels.Slack != nil {
+			if url := req.Channels.Slack.WebhookURL; url != "" {
+				if err := provider.ValidateWebhookURL(url); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "VALIDATION_ERROR", "message": "channels.slack.webhookUrl: " + err.Error()}})
+					return
+				}
+			}
 			sub.Channels.Slack = model.SlackConfig{WebhookURL: req.Channels.Slack.WebhookURL}
 		}
 		if req.Channels.MSTeams != nil {
+			if url := req.Channels.MSTeams.WebhookURL; url != "" {
+				if err := provider.ValidateWebhookURL(url); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "VALIDATION_ERROR", "message": "channels.msTeams.webhookUrl: " + err.Error()}})
+					return
+				}
+			}
 			sub.Channels.MSTeams = model.MSTeamsConfig{WebhookURL: req.Channels.MSTeams.WebhookURL}
 		}
 	}
@@ -58,7 +71,7 @@ func (h *SubscriberHandler) Create(c *gin.Context) {
 	}
 
 	if err := h.subRepo.Upsert(c.Request.Context(), envID, sub); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
@@ -92,7 +105,7 @@ func (h *SubscriberHandler) BulkCreate(c *gin.Context) {
 	}
 
 	if err := h.subRepo.BulkUpsert(c.Request.Context(), envID, subs); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
@@ -109,7 +122,7 @@ func (h *SubscriberHandler) Get(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "subscriber not found"}})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
@@ -153,7 +166,7 @@ func (h *SubscriberHandler) Update(c *gin.Context) {
 	}
 
 	if err := h.subRepo.Update(c.Request.Context(), envID, subscriberID, update); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
@@ -170,18 +183,18 @@ func (h *SubscriberHandler) Delete(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "subscriber not found"}})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
 	// Remove from all topics
 	if err := h.tsRepo.DeleteBySubscriber(c.Request.Context(), sub.ID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
 	if err := h.subRepo.Delete(c.Request.Context(), envID, subscriberID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 

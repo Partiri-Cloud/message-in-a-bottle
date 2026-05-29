@@ -2,7 +2,7 @@ package provider
 
 import (
 	"context"
-	"log"
+	"log/slog"
 )
 
 type LogProvider struct{}
@@ -11,6 +11,10 @@ func (p *LogProvider) ID() string      { return "log" }
 func (p *LogProvider) Channel() string { return "log" }
 
 func (p *LogProvider) Send(ctx context.Context, opts SendOptions) (SendResult, error) {
-	log.Printf("[LOG PROVIDER] to=%s subject=%q content_len=%d", opts.To, opts.Subject, len(opts.Content))
+	slog.Info("log provider delivery",
+		"to", opts.To,
+		"subject", opts.Subject,
+		"contentLen", len(opts.Content),
+	)
 	return SendResult{ProviderMessageID: "log-" + opts.To}, nil
 }

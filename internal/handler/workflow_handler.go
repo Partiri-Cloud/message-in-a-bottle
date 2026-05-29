@@ -50,7 +50,7 @@ func (h *WorkflowHandler) Create(c *gin.Context) {
 			c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "CONFLICT", "message": "workflow identifier already exists"}})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
@@ -63,7 +63,7 @@ func (h *WorkflowHandler) List(c *gin.Context) {
 
 	workflows, total, err := h.wfRepo.FindMany(c.Request.Context(), envID, page, limit)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
@@ -80,13 +80,14 @@ func (h *WorkflowHandler) Get(c *gin.Context) {
 		return
 	}
 
-	wf, err := h.wfRepo.FindByID(c.Request.Context(), id)
+	envID := middleware.GetEnvironmentID(c)
+	wf, err := h.wfRepo.FindByID(c.Request.Context(), envID, id)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "workflow not found"}})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
@@ -126,8 +127,12 @@ func (h *WorkflowHandler) Update(c *gin.Context) {
 		IsActive: true,
 	}
 
-	if err := h.wfRepo.Update(c.Request.Context(), id, wf); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+	if err := h.wfRepo.Update(c.Request.Context(), envID, id, wf); err != nil {
+		if err == mongo.ErrNoDocuments {
+			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "workflow not found"}})
+			return
+		}
+		internalError(c, err)
 		return
 	}
 
@@ -147,8 +152,13 @@ func (h *WorkflowHandler) SetStatus(c *gin.Context) {
 		return
 	}
 
-	if err := h.wfRepo.SetActive(c.Request.Context(), id, req.IsActive); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+	envID := middleware.GetEnvironmentID(c)
+	if err := h.wfRepo.SetActive(c.Request.Context(), envID, id, req.IsActive); err != nil {
+		if err == mongo.ErrNoDocuments {
+			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "workflow not found"}})
+			return
+		}
+		internalError(c, err)
 		return
 	}
 
@@ -162,8 +172,13 @@ func (h *WorkflowHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	if err := h.wfRepo.Delete(c.Request.Context(), id); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+	envID := middleware.GetEnvironmentID(c)
+	if err := h.wfRepo.Delete(c.Request.Context(), envID, id); err != nil {
+		if err == mongo.ErrNoDocuments {
+			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "workflow not found"}})
+			return
+		}
+		internalError(c, err)
 		return
 	}
 

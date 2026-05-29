@@ -60,7 +60,7 @@ func (h *TriggerHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 		return fmt.Errorf("invalid workflowId %q: %w", payload.WorkflowID, err)
 	}
 
-	wf, err := h.wfRepo.FindByID(ctx, wfID)
+	wf, err := h.wfRepo.FindByID(ctx, envID, wfID)
 	if err != nil {
 		return fmt.Errorf("find workflow: %w", err)
 	}

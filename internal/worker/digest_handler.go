@@ -58,7 +58,11 @@ func (h *DigestHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 	if err != nil {
 		return fmt.Errorf("invalid workflowId %q: %w", payload.WorkflowID, err)
 	}
-	wf, err := h.wfRepo.FindByID(ctx, wfID)
+	envID, err := bson.ObjectIDFromHex(payload.EnvironmentID)
+	if err != nil {
+		return fmt.Errorf("invalid environmentId %q: %w", payload.EnvironmentID, err)
+	}
+	wf, err := h.wfRepo.FindByID(ctx, envID, wfID)
 	if err != nil {
 		return fmt.Errorf("find workflow: %w", err)
 	}

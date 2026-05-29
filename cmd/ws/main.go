@@ -5,13 +5,15 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"github.com/partiri-cloud/message-in-a-bottle/internal/config"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/logging"
 	"github.com/partiri-cloud/message-in-a-bottle/internal/middleware"
 	"github.com/partiri-cloud/message-in-a-bottle/internal/repository"
 	wslib "github.com/partiri-cloud/message-in-a-bottle/internal/ws"
@@ -28,13 +30,12 @@ type wsAuthMessage struct {
 }
 
 func main() {
+	logger := logging.Init()
+
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("failed to load config: %v", err)
-	}
-
-	if cfg.SubscriberHMACSecret == "" {
-		log.Fatalf("SUBSCRIBER_HMAC_SECRET is required")
+		logger.Error("failed to load config", slog.Any("error", err))
+		os.Exit(1)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -43,11 +44,12 @@ func main() {
 	// MongoDB
 	mongoClient, err := mongo.Connect(options.Client().ApplyURI(cfg.MongoURI))
 	if err != nil {
-		log.Fatalf("failed to connect to mongodb: %v", err)
+		logger.Error("failed to connect to mongodb", slog.Any("error", err))
+		os.Exit(1)
 	}
 	defer func() {
 		if err := mongoClient.Disconnect(context.Background()); err != nil {
-			log.Printf("mongodb disconnect error: %v", err)
+			logger.Error("mongodb disconnect error", slog.Any("error", err))
 		}
 	}()
 	db := mongoClient.Database(cfg.MongoDB)
@@ -70,13 +72,17 @@ func main() {
 
 	presence := wslib.NewPresenceTracker(subRepo)
 
-	// WebSocket origin check
+	// WebSocket origin check — fail closed by default.
+	// Set WS_INSECURE_ALLOW_ALL_ORIGINS=true only in controlled dev environments.
 	acceptOpts := &websocket.AcceptOptions{}
-	if len(cfg.WSAllowedOrigins) > 0 {
+	if os.Getenv("WS_INSECURE_ALLOW_ALL_ORIGINS") == "true" {
+		logger.Warn("WS_INSECURE_ALLOW_ALL_ORIGINS=true: accepting all WebSocket origins — NOT safe for production")
+		acceptOpts.InsecureSkipVerify = true
+	} else if len(cfg.WSAllowedOrigins) > 0 {
 		acceptOpts.OriginPatterns = cfg.WSAllowedOrigins
 	} else {
-		acceptOpts.InsecureSkipVerify = true
-		log.Println("WARNING: WS_ALLOWED_ORIGINS not set, accepting all origins (not safe for production)")
+		logger.Error("WS_ALLOWED_ORIGINS is required; set it or use WS_INSECURE_ALLOW_ALL_ORIGINS=true for dev only")
+		os.Exit(1)
 	}
 
 	mux := http.NewServeMux()
@@ -90,7 +96,7 @@ func main() {
 	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		conn, err := websocket.Accept(w, r, acceptOpts)
 		if err != nil {
-			log.Printf("websocket accept error: %v", err)
+			logger.Error("websocket accept error", slog.Any("error", err))
 			return
 		}
 
@@ -174,19 +180,21 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("WebSocket server starting on :%s", cfg.WSPort)
+		logger.Info("WebSocket server starting", slog.String("port", cfg.WSPort))
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("ws server error: %v", err)
+			logger.Error("ws server error", slog.Any("error", err))
+			os.Exit(1)
 		}
 	}()
 
 	<-ctx.Done()
-	log.Println("shutting down WebSocket server...")
+	logger.Info("shutting down WebSocket server...")
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		log.Fatalf("ws server forced shutdown: %v", err)
+		logger.Error("ws server forced shutdown", slog.Any("error", err))
+		os.Exit(1)
 	}
-	log.Println("WebSocket server stopped")
+	logger.Info("WebSocket server stopped")
 }

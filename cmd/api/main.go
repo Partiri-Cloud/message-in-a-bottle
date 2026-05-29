@@ -2,9 +2,9 @@ package main
 
 import (
 	"context"
-	"encoding/hex"
-	"log"
+	"log/slog"
 	"net/http"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -13,6 +13,8 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/partiri-cloud/message-in-a-bottle/internal/config"
 	"github.com/partiri-cloud/message-in-a-bottle/internal/handler"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/logging"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/middleware"
 	"github.com/partiri-cloud/message-in-a-bottle/internal/repository"
 	"github.com/partiri-cloud/message-in-a-bottle/internal/service"
 	"github.com/redis/go-redis/v9"
@@ -21,9 +23,12 @@ import (
 )
 
 func main() {
+	logger := logging.Init()
+
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("failed to load config: %v", err)
+		logger.Error("failed to load config", slog.Any("error", err))
+		os.Exit(1)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -32,18 +37,19 @@ func main() {
 	// MongoDB
 	mongoClient, err := mongo.Connect(options.Client().ApplyURI(cfg.MongoURI))
 	if err != nil {
-		log.Fatalf("failed to connect to mongodb: %v", err)
+		logger.Error("failed to connect to mongodb", slog.Any("error", err))
+		os.Exit(1)
 	}
 	defer func() {
 		if err := mongoClient.Disconnect(context.Background()); err != nil {
-			log.Printf("mongodb disconnect error: %v", err)
+			logger.Error("mongodb disconnect error", slog.Any("error", err))
 		}
 	}()
 	db := mongoClient.Database(cfg.MongoDB)
 
 	// Ensure indexes
 	if err := repository.EnsureIndexes(ctx, db); err != nil {
-		log.Printf("warning: failed to ensure indexes: %v", err)
+		logger.Warn("failed to ensure indexes", slog.Any("error", err))
 	}
 
 	// Redis
@@ -59,15 +65,6 @@ func main() {
 		Password: cfg.RedisPassword,
 	})
 	defer asynqClient.Close()
-
-	// Encryption key
-	var encryptionKey []byte
-	if cfg.CredentialsEncryptionKey != "" {
-		encryptionKey, err = hex.DecodeString(cfg.CredentialsEncryptionKey)
-		if err != nil {
-			log.Fatalf("invalid CREDENTIALS_ENCRYPTION_KEY: %v", err)
-		}
-	}
 
 	// Repositories
 	envRepo := repository.NewEnvironmentRepository(db)
@@ -90,7 +87,7 @@ func main() {
 		Subscriber:   handler.NewSubscriberHandler(subRepo, tsRepo),
 		Topic:        handler.NewTopicHandler(topicRepo, tsRepo, subRepo),
 		Workflow:     handler.NewWorkflowHandler(wfRepo),
-		Integration:  handler.NewIntegrationHandler(intgRepo, encryptionKey),
+		Integration:  handler.NewIntegrationHandler(intgRepo, cfg.CredentialsEncryptionKeyBytes),
 		Template:     handler.NewTemplateHandler(tmplRepo, tmplSvc),
 		Preference:   handler.NewPreferenceHandler(prefRepo, subRepo),
 		Notification: handler.NewNotificationHandler(notifRepo, activityRepo, subRepo),
@@ -99,8 +96,13 @@ func main() {
 		Announcement: handler.NewAnnouncementHandler(rdb),
 	}
 
-	// Gin router
-	router := gin.Default()
+	// Gin router. Release mode + structured request logging for production;
+	// GIN_MODE=debug can still override locally.
+	if gin.Mode() == gin.DebugMode && os.Getenv("GIN_MODE") == "" {
+		gin.SetMode(gin.ReleaseMode)
+	}
+	router := gin.New()
+	router.Use(middleware.RequestID(), middleware.Logging(logger), gin.Recovery())
 	router.MaxMultipartMemory = cfg.MaxRequestBodyBytes
 	router.Use(func(c *gin.Context) {
 		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, cfg.MaxRequestBodyBytes)
@@ -117,19 +119,21 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("API server starting on :%s", cfg.APIPort)
+		logger.Info("API server starting", slog.String("port", cfg.APIPort))
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("api server error: %v", err)
+			logger.Error("api server error", slog.Any("error", err))
+			os.Exit(1)
 		}
 	}()
 
 	<-ctx.Done()
-	log.Println("shutting down API server...")
+	logger.Info("shutting down API server...")
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		log.Fatalf("api server forced shutdown: %v", err)
+		logger.Error("api server forced shutdown", slog.Any("error", err))
+		os.Exit(1)
 	}
-	log.Println("API server stopped")
+	logger.Info("API server stopped")
 }

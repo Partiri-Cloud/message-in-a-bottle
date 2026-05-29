@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -22,8 +23,11 @@ type Config struct {
 	APIPort string
 	WSPort  string
 
-	CredentialsEncryptionKey string
-	SubscriberHMACSecret     string
+	// CredentialsEncryptionKey holds the raw hex string (for reference/logging purposes only).
+	// Use CredentialsEncryptionKeyBytes for all cryptographic operations.
+	CredentialsEncryptionKey      string
+	CredentialsEncryptionKeyBytes []byte
+	SubscriberHMACSecret          string
 
 	WSAllowedOrigins    []string
 	MaxRequestBodyBytes int64
@@ -56,6 +60,28 @@ func Load() (*Config, error) {
 	if cfg.AdminSecret == "" {
 		return nil, fmt.Errorf("ADMIN_SECRET is required")
 	}
+	if len(cfg.AdminSecret) < 32 {
+		return nil, fmt.Errorf("ADMIN_SECRET must be at least 32 characters")
+	}
+
+	if cfg.SubscriberHMACSecret == "" {
+		return nil, fmt.Errorf("SUBSCRIBER_HMAC_SECRET is required and must be at least 32 characters")
+	}
+	if len(cfg.SubscriberHMACSecret) < 32 {
+		return nil, fmt.Errorf("SUBSCRIBER_HMAC_SECRET is required and must be at least 32 characters")
+	}
+
+	if cfg.CredentialsEncryptionKey == "" {
+		return nil, fmt.Errorf("CREDENTIALS_ENCRYPTION_KEY must be 64 hex characters (32 bytes)")
+	}
+	keyBytes, err := hex.DecodeString(cfg.CredentialsEncryptionKey)
+	if err != nil {
+		return nil, fmt.Errorf("CREDENTIALS_ENCRYPTION_KEY must be 64 hex characters (32 bytes)")
+	}
+	if len(keyBytes) != 32 {
+		return nil, fmt.Errorf("CREDENTIALS_ENCRYPTION_KEY must be 64 hex characters (32 bytes)")
+	}
+	cfg.CredentialsEncryptionKeyBytes = keyBytes
 
 	cfg.RateLimitConfig = defaultRateLimits()
 	if raw := os.Getenv("RATE_LIMIT_CONFIG"); raw != "" {

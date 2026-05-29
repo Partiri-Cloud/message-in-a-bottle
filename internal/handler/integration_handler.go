@@ -40,7 +40,7 @@ func (h *IntegrationHandler) Create(c *gin.Context) {
 
 	encrypted, err := crypto.Encrypt(credJSON, h.encryptionKey)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "failed to encrypt credentials"}})
+		internalErrorMsg(c, err, "failed to encrypt credentials")
 		return
 	}
 
@@ -59,7 +59,7 @@ func (h *IntegrationHandler) Create(c *gin.Context) {
 	}
 
 	if err := h.intgRepo.Create(c.Request.Context(), intg); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
@@ -74,7 +74,7 @@ func (h *IntegrationHandler) List(c *gin.Context) {
 
 	integrations, total, err := h.intgRepo.FindMany(c.Request.Context(), envID, page, limit)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
@@ -104,7 +104,7 @@ func (h *IntegrationHandler) Get(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "integration not found"}})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
@@ -133,7 +133,7 @@ func (h *IntegrationHandler) Update(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "integration not found"}})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "failed to retrieve integration"}})
+		internalErrorMsg(c, err, "failed to retrieve integration")
 		return
 	}
 
@@ -157,14 +157,14 @@ func (h *IntegrationHandler) Update(c *gin.Context) {
 		}
 		encrypted, err := crypto.Encrypt(credJSON, h.encryptionKey)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "failed to encrypt credentials"}})
+			internalErrorMsg(c, err, "failed to encrypt credentials")
 			return
 		}
 		intg.Credentials = encrypted
 	}
 
 	if err := h.intgRepo.Update(c.Request.Context(), envID, id, intg); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "failed to update integration"}})
+		internalErrorMsg(c, err, "failed to update integration")
 		return
 	}
 
@@ -182,7 +182,7 @@ func (h *IntegrationHandler) Delete(c *gin.Context) {
 	envID := middleware.GetEnvironmentID(c)
 
 	if err := h.intgRepo.Delete(c.Request.Context(), envID, id); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "failed to delete integration"}})
+		internalErrorMsg(c, err, "failed to delete integration")
 		return
 	}
 
@@ -198,7 +198,7 @@ func (h *IntegrationHandler) SetPrimary(c *gin.Context) {
 
 	envID := middleware.GetEnvironmentID(c)
 	if err := h.intgRepo.SetPrimary(c.Request.Context(), envID, id); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 

@@ -98,7 +98,7 @@ func (h *DeliveryHandler) ProcessTask(ctx context.Context, t *asynq.Task) error 
 	}
 
 	// Load workflow for preferences
-	wf, err := h.wfRepo.FindByID(ctx, notif.WorkflowID)
+	wf, err := h.wfRepo.FindByID(ctx, envID, notif.WorkflowID)
 	if err != nil {
 		return fmt.Errorf("find workflow: %w", err)
 	}

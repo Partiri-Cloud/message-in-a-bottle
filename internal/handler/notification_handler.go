@@ -27,7 +27,7 @@ func (h *NotificationHandler) List(c *gin.Context) {
 
 	notifs, total, err := h.notifRepo.FindMany(c.Request.Context(), envID, page, limit)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
@@ -50,7 +50,7 @@ func (h *NotificationHandler) Get(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "notification not found"}})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
@@ -68,7 +68,7 @@ func (h *NotificationHandler) Feed(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "subscriber not found"}})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
@@ -90,7 +90,7 @@ func (h *NotificationHandler) Feed(c *gin.Context) {
 
 	notifs, total, err := h.notifRepo.FindFeed(c.Request.Context(), envID, sub.ID, filter, page, limit)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
@@ -108,7 +108,7 @@ func (h *NotificationHandler) MarkSeen(c *gin.Context) {
 	}
 
 	if err := h.notifRepo.MarkSeen(c.Request.Context(), notifID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
@@ -123,7 +123,7 @@ func (h *NotificationHandler) MarkRead(c *gin.Context) {
 	}
 
 	if err := h.notifRepo.MarkRead(c.Request.Context(), notifID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
@@ -138,7 +138,7 @@ func (h *NotificationHandler) Archive(c *gin.Context) {
 	}
 
 	if err := h.notifRepo.MarkArchived(c.Request.Context(), notifID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
@@ -173,7 +173,7 @@ func (h *NotificationHandler) BulkAction(c *gin.Context) {
 	}
 
 	if bulkErr != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, bulkErr)
 		return
 	}
 
@@ -186,7 +186,7 @@ func (h *NotificationHandler) Activity(c *gin.Context) {
 
 	logs, total, err := h.activityRepo.FindMany(c.Request.Context(), envID, page, limit)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
@@ -206,13 +206,13 @@ func (h *NotificationHandler) UnseenCount(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "subscriber not found"}})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
 	count, err := h.notifRepo.UnseenCount(c.Request.Context(), envID, sub.ID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
