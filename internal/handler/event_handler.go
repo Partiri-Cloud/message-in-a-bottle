@@ -36,7 +36,7 @@ func (h *EventHandler) Trigger(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "workflow not found"}})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
@@ -76,7 +76,7 @@ func (h *EventHandler) Broadcast(c *gin.Context) {
 
 	result, err := h.triggerSvc.Broadcast(c.Request.Context(), envID, &req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 

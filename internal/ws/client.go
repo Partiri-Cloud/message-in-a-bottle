@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/partiri-cloud/message-in-a-bottle/internal/repository"
@@ -63,7 +63,7 @@ func (c *Client) readPump(ctx context.Context) {
 		_, data, err := c.conn.Read(ctx)
 		if err != nil {
 			if websocket.CloseStatus(err) != -1 {
-				log.Printf("websocket closed: %v", err)
+				slog.Debug("websocket closed", "error", err)
 			}
 			return
 		}

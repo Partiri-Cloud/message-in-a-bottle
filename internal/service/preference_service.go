@@ -20,7 +20,7 @@ func NewPreferenceService(prefRepo *repository.PreferenceRepository, wfRepo *rep
 }
 
 func (s *PreferenceService) IsChannelEnabled(ctx context.Context, envID, subscriberID bson.ObjectID, workflowID bson.ObjectID, channel string) bool {
-	wf, err := s.wfRepo.FindByID(ctx, workflowID)
+	wf, err := s.wfRepo.FindByID(ctx, envID, workflowID)
 	if err != nil {
 		return true // default to enabled if workflow not found
 	}

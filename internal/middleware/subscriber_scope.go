@@ -31,6 +31,10 @@ var (
 
 // ValidateSubscriberToken validates an HMAC-signed subscriber token and returns the parsed payload.
 func ValidateSubscriberToken(token, hmacSecret string) (*SubscriberTokenPayload, error) {
+	if hmacSecret == "" {
+		return nil, errors.New("subscriber HMAC secret not configured")
+	}
+
 	parts := strings.SplitN(token, ".", 2)
 	if len(parts) != 2 {
 		return nil, ErrInvalidTokenFormat

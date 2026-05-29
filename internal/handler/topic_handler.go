@@ -41,7 +41,7 @@ func (h *TopicHandler) Create(c *gin.Context) {
 			c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "CONFLICT", "message": "topic key already exists"}})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
@@ -55,7 +55,7 @@ func (h *TopicHandler) List(c *gin.Context) {
 
 	topics, total, err := h.topicRepo.FindMany(c.Request.Context(), envID, keyPrefix, page, limit)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
@@ -75,7 +75,7 @@ func (h *TopicHandler) Get(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "topic not found"}})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
@@ -93,7 +93,7 @@ func (h *TopicHandler) Update(c *gin.Context) {
 	topicKey := c.Param("topicKey")
 
 	if err := h.topicRepo.UpdateName(c.Request.Context(), envID, topicKey, req.Name); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
@@ -110,17 +110,17 @@ func (h *TopicHandler) Delete(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "topic not found"}})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
 	if err := h.tsRepo.DeleteByTopic(c.Request.Context(), topic.ID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
 	if err := h.topicRepo.Delete(c.Request.Context(), envID, topicKey); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
@@ -139,7 +139,7 @@ func (h *TopicHandler) AddSubscribers(c *gin.Context) {
 
 	topic, err := h.topicRepo.FindOrCreate(c.Request.Context(), envID, topicKey)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
@@ -156,7 +156,7 @@ func (h *TopicHandler) AddSubscribers(c *gin.Context) {
 	}
 
 	if err := h.tsRepo.BulkAdd(c.Request.Context(), envID, topic.ID, topicSubs); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
@@ -179,7 +179,7 @@ func (h *TopicHandler) RemoveSubscribers(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "topic not found"}})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
@@ -193,7 +193,7 @@ func (h *TopicHandler) RemoveSubscribers(c *gin.Context) {
 	}
 
 	if err := h.tsRepo.BulkRemove(c.Request.Context(), topic.ID, subOIDs); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
@@ -211,13 +211,13 @@ func (h *TopicHandler) ListSubscribers(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "topic not found"}})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
 	subs, total, err := h.tsRepo.FindByTopic(c.Request.Context(), topic.ID, page, limit)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
