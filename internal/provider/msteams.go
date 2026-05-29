@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/partiri-cloud/message-in-a-box/internal/model"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/model"
 )
 
 type MSTeamsProvider struct{}
