@@ -4,11 +4,11 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/partiri-cloud/message-in-a-bottle/internal/handler/dto"
-	"github.com/partiri-cloud/message-in-a-bottle/internal/middleware"
-	"github.com/partiri-cloud/message-in-a-bottle/internal/model"
-	"github.com/partiri-cloud/message-in-a-bottle/internal/repository"
-	"github.com/partiri-cloud/message-in-a-bottle/internal/service"
+	"github.com/partiri-cloud/message-in-a-box/internal/handler/dto"
+	"github.com/partiri-cloud/message-in-a-box/internal/middleware"
+	"github.com/partiri-cloud/message-in-a-box/internal/model"
+	"github.com/partiri-cloud/message-in-a-box/internal/repository"
+	"github.com/partiri-cloud/message-in-a-box/internal/service"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
@@ -48,7 +48,7 @@ func (h *TemplateHandler) Create(c *gin.Context) {
 			c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "CONFLICT", "message": "template identifier already exists"}})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
@@ -61,7 +61,7 @@ func (h *TemplateHandler) List(c *gin.Context) {
 
 	tmpls, total, err := h.tmplRepo.FindMany(c.Request.Context(), envID, page, limit)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
@@ -81,7 +81,7 @@ func (h *TemplateHandler) Get(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "template not found"}})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
@@ -104,7 +104,7 @@ func (h *TemplateHandler) Update(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "template not found"}})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
@@ -128,7 +128,7 @@ func (h *TemplateHandler) Update(c *gin.Context) {
 	}
 
 	if err := h.tmplRepo.Update(c.Request.Context(), envID, identifier, tmpl); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
@@ -140,7 +140,7 @@ func (h *TemplateHandler) Delete(c *gin.Context) {
 	identifier := c.Param("identifier")
 
 	if err := h.tmplRepo.Delete(c.Request.Context(), envID, identifier); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
@@ -158,7 +158,7 @@ func (h *TemplateHandler) Send(c *gin.Context) {
 	identifier := c.Param("identifier")
 
 	if err := h.tmplSvc.Send(c.Request.Context(), envID, identifier, req.To.SubscriberID, req.Payload, req.Locale); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": err.Error()}})
+		internalErrorMsg(c, err, err.Error())
 		return
 	}
 

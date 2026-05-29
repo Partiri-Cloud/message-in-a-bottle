@@ -3,9 +3,9 @@ package service
 import (
 	"context"
 
-	"github.com/partiri-cloud/message-in-a-bottle/internal/engine"
-	"github.com/partiri-cloud/message-in-a-bottle/internal/model"
-	"github.com/partiri-cloud/message-in-a-bottle/internal/repository"
+	"github.com/partiri-cloud/message-in-a-box/internal/engine"
+	"github.com/partiri-cloud/message-in-a-box/internal/model"
+	"github.com/partiri-cloud/message-in-a-box/internal/repository"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
@@ -20,7 +20,7 @@ func NewPreferenceService(prefRepo *repository.PreferenceRepository, wfRepo *rep
 }
 
 func (s *PreferenceService) IsChannelEnabled(ctx context.Context, envID, subscriberID bson.ObjectID, workflowID bson.ObjectID, channel string) bool {
-	wf, err := s.wfRepo.FindByID(ctx, workflowID)
+	wf, err := s.wfRepo.FindByID(ctx, envID, workflowID)
 	if err != nil {
 		return true // default to enabled if workflow not found
 	}

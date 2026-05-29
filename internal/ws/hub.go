@@ -3,7 +3,7 @@ package ws
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"sync"
 
 	"github.com/redis/go-redis/v9"
@@ -26,7 +26,7 @@ func (h *Hub) Register(room string, client *Client) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.clients[room] = append(h.clients[room], client)
-	log.Printf("client registered to room %s (total: %d)", room, len(h.clients[room]))
+	slog.Info("ws client registered", "room", room, "total", len(h.clients[room]))
 }
 
 func (h *Hub) Unregister(room string, client *Client) {
@@ -51,7 +51,7 @@ func (h *Hub) Send(room string, data []byte) {
 		select {
 		case client.send <- data:
 		default:
-			log.Printf("client send buffer full for room %s, dropping message", room)
+			slog.Warn("ws client send buffer full, dropping message", "room", room)
 		}
 	}
 }
@@ -72,7 +72,7 @@ func (h *Hub) SubscribeRedis(ctx context.Context) {
 				}
 				var wsMsg WSMessage
 				if err := json.Unmarshal([]byte(msg.Payload), &wsMsg); err != nil {
-					log.Printf("invalid ws message from redis: %v", err)
+					slog.Error("invalid ws message from redis", "error", err)
 					continue
 				}
 				data, _ := json.Marshal(map[string]any{

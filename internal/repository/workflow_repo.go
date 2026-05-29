@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/partiri-cloud/message-in-a-bottle/internal/model"
+	"github.com/partiri-cloud/message-in-a-box/internal/model"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -31,9 +31,9 @@ func (r *WorkflowRepository) Create(ctx context.Context, wf *model.Workflow) err
 	return nil
 }
 
-func (r *WorkflowRepository) FindByID(ctx context.Context, id bson.ObjectID) (*model.Workflow, error) {
+func (r *WorkflowRepository) FindByID(ctx context.Context, envID, id bson.ObjectID) (*model.Workflow, error) {
 	var wf model.Workflow
-	err := r.col.FindOne(ctx, bson.M{"_id": id}).Decode(&wf)
+	err := r.col.FindOne(ctx, bson.M{"_id": id, "environmentId": envID}).Decode(&wf)
 	if err != nil {
 		return nil, err
 	}
@@ -74,23 +74,41 @@ func (r *WorkflowRepository) FindMany(ctx context.Context, envID bson.ObjectID, 
 	return workflows, total, nil
 }
 
-func (r *WorkflowRepository) Update(ctx context.Context, id bson.ObjectID, wf *model.Workflow) error {
+func (r *WorkflowRepository) Update(ctx context.Context, envID, id bson.ObjectID, wf *model.Workflow) error {
 	wf.UpdatedAt = time.Now()
-	_, err := r.col.ReplaceOne(ctx, bson.M{"_id": id}, wf)
-	return err
+	res, err := r.col.ReplaceOne(ctx, bson.M{"_id": id, "environmentId": envID}, wf)
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
 }
 
-func (r *WorkflowRepository) SetActive(ctx context.Context, id bson.ObjectID, active bool) error {
-	_, err := r.col.UpdateOne(ctx,
-		bson.M{"_id": id},
+func (r *WorkflowRepository) SetActive(ctx context.Context, envID, id bson.ObjectID, active bool) error {
+	res, err := r.col.UpdateOne(ctx,
+		bson.M{"_id": id, "environmentId": envID},
 		bson.M{"$set": bson.M{"isActive": active, "updatedAt": time.Now()}},
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
 }
 
-func (r *WorkflowRepository) Delete(ctx context.Context, id bson.ObjectID) error {
-	_, err := r.col.DeleteOne(ctx, bson.M{"_id": id})
-	return err
+func (r *WorkflowRepository) Delete(ctx context.Context, envID, id bson.ObjectID) error {
+	res, err := r.col.DeleteOne(ctx, bson.M{"_id": id, "environmentId": envID})
+	if err != nil {
+		return err
+	}
+	if res.DeletedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
 }
 
 func (r *WorkflowRepository) Collection() *mongo.Collection {

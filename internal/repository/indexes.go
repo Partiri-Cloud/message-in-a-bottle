@@ -2,7 +2,7 @@ package repository
 
 import (
 	"context"
-	"log"
+	"log/slog"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -76,7 +76,7 @@ func EnsureIndexes(ctx context.Context, db *mongo.Database) error {
 			if err != nil {
 				return err
 			}
-			log.Printf("created index %s on %s", name, collection)
+			slog.Info("created index", "index", name, "collection", collection)
 		}
 	}
 

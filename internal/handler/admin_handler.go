@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/partiri-cloud/message-in-a-bottle/internal/model"
-	"github.com/partiri-cloud/message-in-a-bottle/internal/repository"
+	"github.com/partiri-cloud/message-in-a-box/internal/model"
+	"github.com/partiri-cloud/message-in-a-box/internal/repository"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
@@ -25,17 +25,24 @@ func NewAdminHandler(envRepo *repository.EnvironmentRepository) *AdminHandler {
 
 func (h *AdminHandler) CreateEnvironment(c *gin.Context) {
 	var req struct {
-		Name       string `json:"name" binding:"required"`
-		Identifier string `json:"identifier" binding:"required"`
+		Name        string   `json:"name" binding:"required"`
+		Identifier  string   `json:"identifier" binding:"required"`
+		Permissions []string `json:"permissions"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "VALIDATION_ERROR", "message": err.Error()}})
 		return
 	}
 
+	perms, err := resolvePermissions(req.Permissions)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "VALIDATION_ERROR", "message": err.Error()}})
+		return
+	}
+
 	rawKey, keyHash, err := generateAPIKey()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "failed to generate API key"}})
+		internalErrorMsg(c, err, "failed to generate API key")
 		return
 	}
 
@@ -46,7 +53,7 @@ func (h *AdminHandler) CreateEnvironment(c *gin.Context) {
 			{
 				KeyHash:     keyHash,
 				Name:        "default",
-				Permissions: allPermissions(),
+				Permissions: perms,
 				CreatedAt:   time.Now(),
 				IsActive:    true,
 			},
@@ -58,7 +65,7 @@ func (h *AdminHandler) CreateEnvironment(c *gin.Context) {
 			c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "CONFLICT", "message": fmt.Sprintf("environment with identifier %q already exists", req.Identifier)}})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "failed to create environment"}})
+		internalErrorMsg(c, err, "failed to create environment")
 		return
 	}
 
@@ -73,7 +80,7 @@ func (h *AdminHandler) CreateEnvironment(c *gin.Context) {
 func (h *AdminHandler) ListEnvironments(c *gin.Context) {
 	envs, err := h.envRepo.FindAll(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "failed to list environments"}})
+		internalErrorMsg(c, err, "failed to list environments")
 		return
 	}
 
@@ -105,9 +112,16 @@ func (h *AdminHandler) AddAPIKey(c *gin.Context) {
 	identifier := c.Param("identifier")
 
 	var req struct {
-		Name string `json:"name" binding:"required"`
+		Name        string   `json:"name" binding:"required"`
+		Permissions []string `json:"permissions"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "VALIDATION_ERROR", "message": err.Error()}})
+		return
+	}
+
+	perms, err := resolvePermissions(req.Permissions)
+	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "VALIDATION_ERROR", "message": err.Error()}})
 		return
 	}
@@ -118,26 +132,26 @@ func (h *AdminHandler) AddAPIKey(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": fmt.Sprintf("environment %q not found", identifier)}})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "failed to find environment"}})
+		internalErrorMsg(c, err, "failed to find environment")
 		return
 	}
 
 	rawKey, keyHash, err := generateAPIKey()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "failed to generate API key"}})
+		internalErrorMsg(c, err, "failed to generate API key")
 		return
 	}
 
 	apiKey := model.APIKey{
 		KeyHash:     keyHash,
 		Name:        req.Name,
-		Permissions: allPermissions(),
+		Permissions: perms,
 		CreatedAt:   time.Now(),
 		IsActive:    true,
 	}
 
 	if err := h.envRepo.AddAPIKey(c.Request.Context(), env.ID, apiKey); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "failed to add API key"}})
+		internalErrorMsg(c, err, "failed to add API key")
 		return
 	}
 
@@ -145,6 +159,28 @@ func (h *AdminHandler) AddAPIKey(c *gin.Context) {
 		"name":   req.Name,
 		"apiKey": rawKey,
 	}})
+}
+
+// resolvePermissions applies the following rules:
+//   - nil / empty slice  → all permissions (backward-compatible default)
+//   - ["*"]              → all permissions (explicit wildcard)
+//   - anything else      → validate each entry; reject unknowns with an error
+func resolvePermissions(requested []string) ([]string, error) {
+	if len(requested) == 0 || (len(requested) == 1 && requested[0] == "*") {
+		return allPermissions(), nil
+	}
+
+	allowed := make(map[string]struct{}, len(allPermissions()))
+	for _, p := range allPermissions() {
+		allowed[p] = struct{}{}
+	}
+
+	for _, p := range requested {
+		if _, ok := allowed[p]; !ok {
+			return nil, fmt.Errorf("unknown permission: %s", p)
+		}
+	}
+	return requested, nil
 }
 
 func generateAPIKey() (string, string, error) {
@@ -164,7 +200,7 @@ func allPermissions() []string {
 		"topics:read", "topics:write",
 		"workflows:read", "workflows:write",
 		"integrations:read", "integrations:write",
-		"templates:read", "templates:write",
+		"templates:read", "templates:write", "templates:send",
 		"notifications:read", "notifications:trigger",
 		"preferences:read", "preferences:write",
 		"activity:read",

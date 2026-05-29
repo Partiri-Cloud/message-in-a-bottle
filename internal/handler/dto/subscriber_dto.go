@@ -24,10 +24,16 @@ type PushDTO struct {
 	APNSTokens []string `json:"apnsTokens"`
 }
 
+// SlackDTO carries the Slack incoming-webhook URL for a subscriber channel.
+// Non-empty values are validated against the SSRF allowlist in subscriber_handler.go
+// before being stored. Omitting the field (empty string) disables the channel.
 type SlackDTO struct {
 	WebhookURL string `json:"webhookUrl"`
 }
 
+// MSTeamsDTO carries the MS Teams incoming-webhook URL for a subscriber channel.
+// Non-empty values are validated against the SSRF allowlist in subscriber_handler.go
+// before being stored. Omitting the field (empty string) disables the channel.
 type MSTeamsDTO struct {
 	WebhookURL string `json:"webhookUrl"`
 }

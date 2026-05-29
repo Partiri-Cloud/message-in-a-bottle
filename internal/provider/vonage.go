@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/partiri-cloud/message-in-a-bottle/internal/model"
+	"github.com/partiri-cloud/message-in-a-box/internal/model"
 )
 
 type VonageProvider struct {
@@ -41,7 +41,7 @@ func (p *VonageProvider) Send(ctx context.Context, opts SendOptions) (SendResult
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := WebhookClient.Do(req)
 	if err != nil {
 		return SendResult{}, err
 	}

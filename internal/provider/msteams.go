@@ -5,10 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 
-	"github.com/partiri-cloud/message-in-a-bottle/internal/model"
+	"github.com/partiri-cloud/message-in-a-box/internal/model"
 )
 
 type MSTeamsProvider struct{}
@@ -21,32 +20,41 @@ func (p *MSTeamsProvider) ID() string      { return "ms_teams_webhook" }
 func (p *MSTeamsProvider) Channel() string { return "ms_teams" }
 
 func (p *MSTeamsProvider) Send(ctx context.Context, opts SendOptions) (SendResult, error) {
+	if err := ValidateWebhookURL(opts.To); err != nil {
+		return SendResult{}, err
+	}
+	return p.post(ctx, opts.To, opts.Subject, opts.Content, WebhookClient)
+}
+
+// post performs the actual HTTP POST to the MS Teams webhook. It is separate from
+// Send to allow unit tests to inject a test server client without bypassing
+// URL validation.
+func (p *MSTeamsProvider) post(ctx context.Context, webhookURL, subject, content string, client *http.Client) (SendResult, error) {
 	card := map[string]any{
 		"@type":    "MessageCard",
 		"@context": "http://schema.org/extensions",
-		"summary":  opts.Subject,
+		"summary":  subject,
 		"sections": []map[string]any{{
-			"activityTitle": opts.Subject,
-			"text":          opts.Content,
+			"activityTitle": subject,
+			"text":          content,
 		}},
 	}
 	body, _ := json.Marshal(card)
 
-	req, err := http.NewRequestWithContext(ctx, "POST", opts.To, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, "POST", webhookURL, bytes.NewReader(body))
 	if err != nil {
 		return SendResult{}, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return SendResult{}, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		return SendResult{}, fmt.Errorf("ms teams webhook error: status %d, body: %s", resp.StatusCode, string(respBody))
+		return SendResult{}, fmt.Errorf("ms teams webhook error: status %d", resp.StatusCode)
 	}
 
 	return SendResult{}, nil
