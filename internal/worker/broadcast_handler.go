@@ -86,7 +86,16 @@ func (h *BroadcastHandler) ProcessTask(ctx context.Context, t *asynq.Task) error
 			}
 			if err := h.notifRepo.Create(ctx, notif); err != nil {
 				if mongo.IsDuplicateKeyError(err) {
-					// Already processed — skip this subscriber (idempotent re-run).
+					// Created by a previous run of this broadcast (at-least-once
+					// retry). Its trigger may never have been enqueued, so look
+					// it up and include it anyway — the trigger and delivery
+					// paths are idempotent.
+					existing, ferr := h.notifRepo.FindByTransactionAndSubscriber(ctx, envID, payload.TransactionID, sub.ID)
+					if ferr != nil {
+						log.Printf("broadcast: find existing notification for subscriber %s: %v", sub.ID.Hex(), ferr)
+						continue
+					}
+					notifIDMap[sub.ID.Hex()] = existing.ID.Hex()
 					continue
 				}
 				log.Printf("broadcast: create notification for subscriber %s: %v", sub.ID.Hex(), err)

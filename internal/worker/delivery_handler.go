@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -88,19 +89,51 @@ func (h *DeliveryHandler) ProcessTask(ctx context.Context, t *asynq.Task) error 
 	// Load subscriber
 	subscriber, err := h.subRepo.FindByID(ctx, subID)
 	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			log.Printf("delivery: subscriber %s no longer exists, dropping", payload.SubscriberID)
+			return nil
+		}
 		return fmt.Errorf("find subscriber: %w", err)
 	}
 
 	// Load notification
 	notif, err := h.notifRepo.FindByID(ctx, envID, notifID)
 	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			log.Printf("delivery: notification %s no longer exists, dropping", payload.NotificationID)
+			return nil
+		}
 		return fmt.Errorf("find notification: %w", err)
+	}
+
+	// At-least-once redelivery guard: if this channel already reached a final
+	// state (sent, failed, skipped, ...), a previous run handled it — don't
+	// send again.
+	for _, ch := range notif.Channels {
+		if ch.Channel == payload.Channel {
+			if ch.Status != "pending" && ch.Status != "queued" {
+				return nil
+			}
+			break
+		}
 	}
 
 	// Load workflow for preferences
 	wf, err := h.wfRepo.FindByID(ctx, envID, notif.WorkflowID)
 	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			log.Printf("delivery: workflow %s no longer exists, dropping", notif.WorkflowID.Hex())
+			return nil
+		}
 		return fmt.Errorf("find workflow: %w", err)
+	}
+
+	// The workflow may have been edited between enqueue and execution
+	// (delayed/digested tasks can fire hours later).
+	if payload.StepIndex < 0 || payload.StepIndex >= len(wf.Steps) {
+		h.logActivity(ctx, envID, notifID, subID, payload.Channel, "provider_error", map[string]any{"error": "workflow step no longer exists"})
+		h.notifRepo.UpdateChannelStatus(ctx, notifID, payload.Channel, "failed", bson.M{"errorMessage": "workflow step no longer exists"})
+		return nil
 	}
 
 	// Check rate limit
@@ -167,15 +200,20 @@ func (h *DeliveryHandler) ProcessTask(ctx context.Context, t *asynq.Task) error 
 			for i := 0; i < payload.Attempt; i++ {
 				backoff *= time.Duration(BackoffMultiplier)
 			}
-			data, merr := json.Marshal(payload)
-			if merr != nil {
+			if data, merr := json.Marshal(payload); merr != nil {
 				log.Printf("marshal retry payload: %v", merr)
-				return nil
+			} else {
+				task := asynq.NewTask(TaskTypeDelivery, data)
+				_, eerr := h.asynq.Enqueue(task, asynq.ProcessIn(backoff), asynq.TaskID(deliveryTaskID(payload.NotificationID, payload.StepIndex, payload.Attempt)))
+				if eerr == nil || errors.Is(eerr, asynq.ErrTaskIDConflict) {
+					h.logActivity(ctx, envID, notifID, subID, payload.Channel, "retry_scheduled", map[string]any{"attempt": payload.Attempt})
+					return nil
+				}
+				// Surface the failure so asynq redelivers this task; returning
+				// nil here would silently lose the retry and strand the
+				// notification as pending.
+				return fmt.Errorf("schedule delivery retry: %w", eerr)
 			}
-			task := asynq.NewTask(TaskTypeDelivery, data)
-			h.asynq.Enqueue(task, asynq.ProcessIn(backoff))
-			h.logActivity(ctx, envID, notifID, subID, payload.Channel, "retry_scheduled", map[string]any{"attempt": payload.Attempt})
-			return nil
 		}
 
 		now := time.Now()

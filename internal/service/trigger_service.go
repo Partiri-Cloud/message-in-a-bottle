@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -103,8 +104,22 @@ func (s *TriggerService) Trigger(ctx context.Context, envID bson.ObjectID, req *
 
 	// Create notifications and enqueue. The unique index on {environmentId, transactionId, subscriberId}
 	// is the authoritative idempotency guard — no separate pre-check needed.
+	//
+	// If anything fails before the trigger task is enqueued, the created
+	// notifications are deleted so they aren't stranded as pending — and so a
+	// client retry with the same transactionId isn't permanently rejected as a
+	// duplicate by the unique index.
 	var notifIDs []string
+	var createdIDs []bson.ObjectID
 	notifIDMap := make(map[string]string, len(subscriberIDs))
+	cleanup := func() {
+		// The request context may already be canceled; still try to clean up.
+		cleanupCtx := context.WithoutCancel(ctx)
+		if err := s.notifRepo.DeleteByIDs(cleanupCtx, envID, createdIDs); err != nil {
+			slog.Error("trigger: failed to clean up notifications after enqueue failure",
+				"transactionId", txID, "count", len(createdIDs), "error", err)
+		}
+	}
 	for _, subID := range subscriberIDs {
 		channels := make([]model.ChannelDelivery, 0)
 		for _, step := range wf.Steps {
@@ -128,6 +143,7 @@ func (s *TriggerService) Trigger(ctx context.Context, envID bson.ObjectID, req *
 		}
 
 		if err := s.notifRepo.Create(ctx, notif); err != nil {
+			cleanup()
 			if mongo.IsDuplicateKeyError(err) {
 				return nil, ErrDuplicateTransaction
 			}
@@ -135,6 +151,7 @@ func (s *TriggerService) Trigger(ctx context.Context, envID bson.ObjectID, req *
 		}
 
 		notifIDs = append(notifIDs, notif.ID.Hex())
+		createdIDs = append(createdIDs, notif.ID)
 		notifIDMap[subID.Hex()] = notif.ID.Hex()
 	}
 
@@ -150,10 +167,12 @@ func (s *TriggerService) Trigger(ctx context.Context, envID bson.ObjectID, req *
 
 	data, err := json.Marshal(payload)
 	if err != nil {
+		cleanup()
 		return nil, fmt.Errorf("marshal trigger payload: %w", err)
 	}
 	task := asynq.NewTask(TaskTypeTrigger, data)
 	if _, err := s.asynq.Enqueue(task); err != nil {
+		cleanup()
 		return nil, err
 	}
 

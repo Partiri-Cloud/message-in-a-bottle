@@ -39,6 +39,23 @@ func (r *NotificationRepository) FindByID(ctx context.Context, envID, id bson.Ob
 	return &notif, nil
 }
 
+func (r *NotificationRepository) FindByTransactionAndSubscriber(ctx context.Context, envID bson.ObjectID, txID string, subID bson.ObjectID) (*model.Notification, error) {
+	var notif model.Notification
+	err := r.col.FindOne(ctx, bson.M{"environmentId": envID, "transactionId": txID, "subscriberId": subID}).Decode(&notif)
+	if err != nil {
+		return nil, err
+	}
+	return &notif, nil
+}
+
+func (r *NotificationRepository) DeleteByIDs(ctx context.Context, envID bson.ObjectID, ids []bson.ObjectID) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	_, err := r.col.DeleteMany(ctx, bson.M{"_id": bson.M{"$in": ids}, "environmentId": envID})
+	return err
+}
+
 func (r *NotificationRepository) FindByTransactionID(ctx context.Context, envID bson.ObjectID, txID string) (*model.Notification, error) {
 	var notif model.Notification
 	err := r.col.FindOne(ctx, bson.M{"environmentId": envID, "transactionId": txID}).Decode(&notif)
