@@ -88,7 +88,7 @@ func (h *TriggerHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 			log.Printf("invalid notificationId %q for subscriber %s, skipping: %v", notifIDStr, subIDStr, err)
 			continue
 		}
-		notif, err := h.notifRepo.FindByID(ctx, notifID)
+		notif, err := h.notifRepo.FindByID(ctx, envID, notifID)
 		if err != nil {
 			log.Printf("notification %s not found for subscriber %s, skipping", notifIDStr, subIDStr)
 			continue

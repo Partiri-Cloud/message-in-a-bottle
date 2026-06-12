@@ -106,21 +106,21 @@ func (c *Client) handleMessage(ctx context.Context, msg ClientMessage) {
 		var p SeenPayload
 		json.Unmarshal(msg.Payload, &p)
 		if id, err := bson.ObjectIDFromHex(p.NotificationID); err == nil {
-			c.notifRepo.MarkSeen(ctx, id)
+			c.notifRepo.MarkSeen(ctx, c.envID, c.subID, id)
 			c.sendUnseenCount(ctx)
 		}
 	case ActionRead:
 		var p ReadPayload
 		json.Unmarshal(msg.Payload, &p)
 		if id, err := bson.ObjectIDFromHex(p.NotificationID); err == nil {
-			c.notifRepo.MarkRead(ctx, id)
+			c.notifRepo.MarkRead(ctx, c.envID, c.subID, id)
 			c.sendUnseenCount(ctx)
 		}
 	case ActionArchive:
 		var p ArchivePayload
 		json.Unmarshal(msg.Payload, &p)
 		if id, err := bson.ObjectIDFromHex(p.NotificationID); err == nil {
-			c.notifRepo.MarkArchived(ctx, id)
+			c.notifRepo.MarkArchived(ctx, c.envID, c.subID, id)
 		}
 	case ActionFetch:
 		var p FetchPayload

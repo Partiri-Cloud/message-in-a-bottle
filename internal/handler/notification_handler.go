@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/partiri-cloud/message-in-a-bottle/internal/handler/dto"
 	"github.com/partiri-cloud/message-in-a-bottle/internal/middleware"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/model"
 	"github.com/partiri-cloud/message-in-a-bottle/internal/repository"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -37,14 +38,32 @@ func (h *NotificationHandler) List(c *gin.Context) {
 	})
 }
 
+// scopedSubscriber resolves the subscriber identified by the :subscriberId URL
+// param within the authenticated environment. On failure it writes the error
+// response and returns ok=false.
+func (h *NotificationHandler) scopedSubscriber(c *gin.Context) (sub *model.Subscriber, ok bool) {
+	envID := middleware.GetEnvironmentID(c)
+	sub, err := h.subRepo.FindBySubscriberID(c.Request.Context(), envID, c.Param("subscriberId"))
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "subscriber not found"}})
+			return nil, false
+		}
+		internalError(c, err)
+		return nil, false
+	}
+	return sub, true
+}
+
 func (h *NotificationHandler) Get(c *gin.Context) {
+	envID := middleware.GetEnvironmentID(c)
 	id, err := bson.ObjectIDFromHex(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "VALIDATION_ERROR", "message": "invalid notification ID"}})
 		return
 	}
 
-	notif, err := h.notifRepo.FindByID(c.Request.Context(), id)
+	notif, err := h.notifRepo.FindByID(c.Request.Context(), envID, id)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "notification not found"}})
@@ -59,16 +78,10 @@ func (h *NotificationHandler) Get(c *gin.Context) {
 
 func (h *NotificationHandler) Feed(c *gin.Context) {
 	envID := middleware.GetEnvironmentID(c)
-	subscriberID := c.Param("subscriberId")
 	page, limit := dto.ParsePagination(c)
 
-	sub, err := h.subRepo.FindBySubscriberID(c.Request.Context(), envID, subscriberID)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "subscriber not found"}})
-			return
-		}
-		internalError(c, err)
+	sub, ok := h.scopedSubscriber(c)
+	if !ok {
 		return
 	}
 
@@ -107,7 +120,12 @@ func (h *NotificationHandler) MarkSeen(c *gin.Context) {
 		return
 	}
 
-	if err := h.notifRepo.MarkSeen(c.Request.Context(), notifID); err != nil {
+	sub, ok := h.scopedSubscriber(c)
+	if !ok {
+		return
+	}
+
+	if err := h.notifRepo.MarkSeen(c.Request.Context(), middleware.GetEnvironmentID(c), sub.ID, notifID); err != nil {
 		internalError(c, err)
 		return
 	}
@@ -122,7 +140,12 @@ func (h *NotificationHandler) MarkRead(c *gin.Context) {
 		return
 	}
 
-	if err := h.notifRepo.MarkRead(c.Request.Context(), notifID); err != nil {
+	sub, ok := h.scopedSubscriber(c)
+	if !ok {
+		return
+	}
+
+	if err := h.notifRepo.MarkRead(c.Request.Context(), middleware.GetEnvironmentID(c), sub.ID, notifID); err != nil {
 		internalError(c, err)
 		return
 	}
@@ -137,7 +160,12 @@ func (h *NotificationHandler) Archive(c *gin.Context) {
 		return
 	}
 
-	if err := h.notifRepo.MarkArchived(c.Request.Context(), notifID); err != nil {
+	sub, ok := h.scopedSubscriber(c)
+	if !ok {
+		return
+	}
+
+	if err := h.notifRepo.MarkArchived(c.Request.Context(), middleware.GetEnvironmentID(c), sub.ID, notifID); err != nil {
 		internalError(c, err)
 		return
 	}
@@ -152,6 +180,11 @@ func (h *NotificationHandler) BulkAction(c *gin.Context) {
 		return
 	}
 
+	sub, ok := h.scopedSubscriber(c)
+	if !ok {
+		return
+	}
+
 	var ids []bson.ObjectID
 	for _, idStr := range req.NotificationIDs {
 		id, err := bson.ObjectIDFromHex(idStr)
@@ -161,12 +194,13 @@ func (h *NotificationHandler) BulkAction(c *gin.Context) {
 		ids = append(ids, id)
 	}
 
+	envID := middleware.GetEnvironmentID(c)
 	var bulkErr error
 	switch req.Action {
 	case "read":
-		bulkErr = h.notifRepo.BulkMarkRead(c.Request.Context(), ids)
+		bulkErr = h.notifRepo.BulkMarkRead(c.Request.Context(), envID, sub.ID, ids)
 	case "seen":
-		bulkErr = h.notifRepo.BulkMarkSeen(c.Request.Context(), ids)
+		bulkErr = h.notifRepo.BulkMarkSeen(c.Request.Context(), envID, sub.ID, ids)
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "VALIDATION_ERROR", "message": "action must be 'read' or 'seen'"}})
 		return
@@ -198,15 +232,9 @@ func (h *NotificationHandler) Activity(c *gin.Context) {
 
 func (h *NotificationHandler) UnseenCount(c *gin.Context) {
 	envID := middleware.GetEnvironmentID(c)
-	subscriberID := c.Param("subscriberId")
 
-	sub, err := h.subRepo.FindBySubscriberID(c.Request.Context(), envID, subscriberID)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "subscriber not found"}})
-			return
-		}
-		internalError(c, err)
+	sub, ok := h.scopedSubscriber(c)
+	if !ok {
 		return
 	}
 
