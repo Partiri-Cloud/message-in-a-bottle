@@ -38,5 +38,9 @@ func (p *SendGridProvider) Send(ctx context.Context, opts SendOptions) (SendResu
 	if resp.StatusCode >= 400 {
 		return SendResult{}, fmt.Errorf("sendgrid error: status %d, body: %s", resp.StatusCode, resp.Body)
 	}
-	return SendResult{ProviderMessageID: resp.Headers["X-Message-Id"][0]}, nil
+	var msgID string
+	if ids := resp.Headers["X-Message-Id"]; len(ids) > 0 {
+		msgID = ids[0]
+	}
+	return SendResult{ProviderMessageID: msgID}, nil
 }
