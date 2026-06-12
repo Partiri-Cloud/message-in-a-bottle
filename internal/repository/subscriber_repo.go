@@ -18,14 +18,37 @@ func NewSubscriberRepository(db *mongo.Database) *SubscriberRepository {
 	return &SubscriberRepository{col: db.Collection("subscribers")}
 }
 
+// subscriberSetDoc marshals sub into a document suitable for $set in an
+// upsert: createdAt must be excluded because it is owned by $setOnInsert —
+// MongoDB rejects updates where two operators target the same path, and $set
+// would clobber the original value on updates.
+func subscriberSetDoc(sub *model.Subscriber) (bson.M, error) {
+	raw, err := bson.Marshal(sub)
+	if err != nil {
+		return nil, err
+	}
+	var doc bson.M
+	if err := bson.Unmarshal(raw, &doc); err != nil {
+		return nil, err
+	}
+	delete(doc, "createdAt")
+	delete(doc, "_id")
+	return doc, nil
+}
+
 func (r *SubscriberRepository) Upsert(ctx context.Context, envID bson.ObjectID, sub *model.Subscriber) error {
 	now := time.Now()
 	sub.EnvironmentID = envID
 	sub.UpdatedAt = now
 
+	setDoc, err := subscriberSetDoc(sub)
+	if err != nil {
+		return err
+	}
+
 	filter := bson.M{"environmentId": envID, "subscriberId": sub.SubscriberID}
 	update := bson.M{
-		"$set": sub,
+		"$set": setDoc,
 		"$setOnInsert": bson.M{
 			"createdAt": now,
 		},
@@ -52,10 +75,14 @@ func (r *SubscriberRepository) BulkUpsert(ctx context.Context, envID bson.Object
 	for i := range subs {
 		subs[i].EnvironmentID = envID
 		subs[i].UpdatedAt = now
+		setDoc, err := subscriberSetDoc(&subs[i])
+		if err != nil {
+			return err
+		}
 		models[i] = mongo.NewUpdateOneModel().
 			SetFilter(bson.M{"environmentId": envID, "subscriberId": subs[i].SubscriberID}).
 			SetUpdate(bson.M{
-				"$set":         subs[i],
+				"$set":         setDoc,
 				"$setOnInsert": bson.M{"createdAt": now},
 			}).
 			SetUpsert(true)

@@ -46,12 +46,18 @@ func TestSubscriberRepo_Upsert_Update(t *testing.T) {
 	sub := &model.Subscriber{SubscriberID: "usr_002", FirstName: "Bob", Locale: "en"}
 	require.NoError(t, repo.Upsert(context.Background(), envID, sub))
 
+	created, err := repo.FindBySubscriberID(context.Background(), envID, "usr_002")
+	require.NoError(t, err)
+	assert.False(t, created.CreatedAt.IsZero())
+
 	sub.FirstName = "Robert"
 	require.NoError(t, repo.Upsert(context.Background(), envID, sub))
 
 	found, err := repo.FindBySubscriberID(context.Background(), envID, "usr_002")
 	require.NoError(t, err)
 	assert.Equal(t, "Robert", found.FirstName)
+	// createdAt is owned by $setOnInsert and must survive updates.
+	assert.Equal(t, created.CreatedAt.Unix(), found.CreatedAt.Unix())
 }
 
 func TestSubscriberRepo_BulkUpsert(t *testing.T) {
