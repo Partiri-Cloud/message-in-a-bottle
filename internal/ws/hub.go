@@ -85,6 +85,12 @@ func (h *Hub) SubscribeRedis(ctx context.Context) {
 	}()
 }
 
+func (h *Hub) HasClients(room string) bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return len(h.clients[room]) > 0
+}
+
 func (h *Hub) ConnectionCount() int {
 	h.mu.RLock()
 	defer h.mu.RUnlock()

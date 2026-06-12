@@ -14,10 +14,12 @@ import (
 
 const (
 	writeWait  = 10 * time.Second
-	pongWait   = 60 * time.Second
 	pingPeriod = 30 * time.Second
 	maxMsgSize = 4096
 	sendBufLen = 64
+	// offlineGrace is how long after a connection closes before the subscriber
+	// is marked offline, so quick reconnects don't flap presence.
+	offlineGrace = 30 * time.Second
 )
 
 type Client struct {
@@ -45,6 +47,12 @@ func NewClient(conn *websocket.Conn, hub *Hub, room string, envID, subID bson.Ob
 }
 
 func (c *Client) Run(ctx context.Context) {
+	// Cancel the writer as soon as the reader exits so neither goroutine
+	// outlives the connection.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	c.conn.SetReadLimit(maxMsgSize)
 	go c.writePump(ctx)
 	c.readPump(ctx)
 }
@@ -53,9 +61,15 @@ func (c *Client) readPump(ctx context.Context) {
 	defer func() {
 		c.hub.Unregister(c.room, c)
 		c.conn.Close(websocket.StatusNormalClosure, "")
-		// Grace period for reconnect before marking offline
-		time.AfterFunc(30*time.Second, func() {
-			c.subRepo.SetOnlineStatus(context.Background(), c.subID, false)
+		// Grace period for reconnect before marking offline. Only mark offline
+		// if the subscriber hasn't opened a new connection in the meantime.
+		time.AfterFunc(offlineGrace, func() {
+			if c.hub.HasClients(c.room) {
+				return
+			}
+			if err := c.subRepo.SetOnlineStatus(context.Background(), c.subID, false); err != nil {
+				slog.Error("failed to mark subscriber offline", "room", c.room, "error", err)
+			}
 		})
 	}()
 
@@ -80,6 +94,9 @@ func (c *Client) readPump(ctx context.Context) {
 func (c *Client) writePump(ctx context.Context) {
 	ticker := time.NewTicker(pingPeriod)
 	defer ticker.Stop()
+	// Closing the connection unblocks readPump when the writer exits first
+	// (write timeout, dead peer, server shutdown).
+	defer c.conn.Close(websocket.StatusGoingAway, "")
 
 	for {
 		select {
@@ -87,16 +104,40 @@ func (c *Client) writePump(ctx context.Context) {
 			if !ok {
 				return
 			}
-			if err := c.conn.Write(ctx, websocket.MessageText, msg); err != nil {
+			if err := c.writeWithTimeout(ctx, msg); err != nil {
 				return
 			}
 		case <-ticker.C:
-			if err := c.conn.Ping(ctx); err != nil {
+			// Ping waits for the pong; an unresponsive peer fails within
+			// writeWait instead of parking this goroutine forever.
+			if err := c.pingWithTimeout(ctx); err != nil {
 				return
 			}
 		case <-ctx.Done():
 			return
 		}
+	}
+}
+
+func (c *Client) writeWithTimeout(ctx context.Context, msg []byte) error {
+	wctx, cancel := context.WithTimeout(ctx, writeWait)
+	defer cancel()
+	return c.conn.Write(wctx, websocket.MessageText, msg)
+}
+
+func (c *Client) pingWithTimeout(ctx context.Context) error {
+	pctx, cancel := context.WithTimeout(ctx, writeWait)
+	defer cancel()
+	return c.conn.Ping(pctx)
+}
+
+// trySend queues data for the writer without blocking: if the writer is gone
+// or backed up, the message is dropped instead of deadlocking readPump.
+func (c *Client) trySend(data []byte) {
+	select {
+	case c.send <- data:
+	default:
+		slog.Warn("ws client send buffer full, dropping message", "room", c.room)
 	}
 }
 
@@ -142,7 +183,7 @@ func (c *Client) handleMessage(ctx context.Context, msg ClientMessage) {
 				"total":         total,
 			},
 		})
-		c.send <- data
+		c.trySend(data)
 	}
 }
 
@@ -155,7 +196,7 @@ func (c *Client) sendUnseenCount(ctx context.Context) {
 		"event": EventUnseenCount,
 		"data":  map[string]any{"count": count},
 	})
-	c.send <- data
+	c.trySend(data)
 }
 
 func RoomKey(envID, subID bson.ObjectID) string {
