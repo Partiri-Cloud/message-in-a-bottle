@@ -9,12 +9,16 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/redis/go-redis/v9"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
+	"github.com/partiri-cloud/message-in-a-bottle/internal/engine"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/model"
 	"github.com/partiri-cloud/message-in-a-bottle/internal/repository"
 )
 
 type DigestHandler struct {
 	notifRepo *repository.NotificationRepository
+	subRepo   *repository.SubscriberRepository
 	wfRepo    *repository.WorkflowRepository
 	asynq     *asynq.Client
 	rdb       *redis.Client
@@ -22,12 +26,14 @@ type DigestHandler struct {
 
 func NewDigestHandler(
 	notifRepo *repository.NotificationRepository,
+	subRepo *repository.SubscriberRepository,
 	wfRepo *repository.WorkflowRepository,
 	asynqClient *asynq.Client,
 	rdb *redis.Client,
 ) *DigestHandler {
 	return &DigestHandler{
 		notifRepo: notifRepo,
+		subRepo:   subRepo,
 		wfRepo:    wfRepo,
 		asynq:     asynqClient,
 		rdb:       rdb,
@@ -41,13 +47,24 @@ func (h *DigestHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 	}
 
 	// Collect digested notification IDs from Redis list.
-	// Key format must match the one used in trigger_handler.go enqueueDigest.
+	// Key format must match the one used in continuation.go scheduleDigestStep.
 	digestKey := fmt.Sprintf("digest:%s:%s:%d:%s:%s", payload.EnvironmentID, payload.WorkflowID, payload.StepIndex, payload.SubscriberID, payload.DigestKey)
-	notifIDs, err := h.rdb.LRange(ctx, digestKey, 0, -1).Result()
+	rawIDs, err := h.rdb.LRange(ctx, digestKey, 0, -1).Result()
 	if err != nil {
 		return fmt.Errorf("lrange digest key: %w", err)
 	}
 	h.rdb.Del(ctx, digestKey)
+
+	// A retried trigger task may have pushed the same notification twice.
+	seen := make(map[string]struct{}, len(rawIDs))
+	notifIDs := make([]string, 0, len(rawIDs))
+	for _, id := range rawIDs {
+		if _, dup := seen[id]; dup {
+			continue
+		}
+		seen[id] = struct{}{}
+		notifIDs = append(notifIDs, id)
+	}
 
 	if len(notifIDs) == 0 {
 		return nil
@@ -62,47 +79,46 @@ func (h *DigestHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 	if err != nil {
 		return fmt.Errorf("invalid environmentId %q: %w", payload.EnvironmentID, err)
 	}
+	subID, err := bson.ObjectIDFromHex(payload.SubscriberID)
+	if err != nil {
+		return fmt.Errorf("invalid subscriberId %q: %w", payload.SubscriberID, err)
+	}
+
 	wf, err := h.wfRepo.FindByID(ctx, envID, wfID)
 	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			log.Printf("digest: workflow %s no longer exists, dropping continuation", payload.WorkflowID)
+			return nil
+		}
 		return fmt.Errorf("find workflow: %w", err)
 	}
 
-	// Collect digested notification object IDs
-	var digestedOIDs []bson.ObjectID
-	for _, idStr := range notifIDs {
-		oid, err := bson.ObjectIDFromHex(idStr)
-		if err == nil {
-			digestedOIDs = append(digestedOIDs, oid)
+	subscriber, err := h.subRepo.FindByID(ctx, subID)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			log.Printf("digest: subscriber %s no longer exists, dropping continuation", payload.SubscriberID)
+			return nil
 		}
+		return fmt.Errorf("find subscriber: %w", err)
 	}
 
-	// Enqueue delivery for steps after the digest step
-	for i := payload.StepIndex + 1; i < len(wf.Steps); i++ {
-		step := wf.Steps[i]
-		if step.Type == "delay" || step.Type == "digest" {
-			break
-		}
-
-		// Use first notification as the representative
-		dp := DeliveryPayload{
-			EnvironmentID:  payload.EnvironmentID,
-			NotificationID: notifIDs[0],
-			SubscriberID:   payload.SubscriberID,
-			Channel:        step.Type,
-			StepIndex:      i,
-			Payload:        map[string]any{"digestCount": len(notifIDs), "digestedIds": notifIDs},
-			Attempt:        0,
-		}
-		data, merr := json.Marshal(dp)
-		if merr != nil {
-			log.Printf("failed to marshal post-digest delivery step %d: %v", i, merr)
-			continue
-		}
-		task := asynq.NewTask(TaskTypeDelivery, data)
-		if _, err := h.asynq.Enqueue(task); err != nil {
-			log.Printf("failed to enqueue post-digest delivery step %d: %v", i, err)
-		}
+	// Use the first notification as the representative for the post-digest
+	// steps. It may have expired; conditions on it then resolve to nil.
+	var notif *model.Notification
+	if repID, err := bson.ObjectIDFromHex(notifIDs[0]); err == nil {
+		notif, _ = h.notifRepo.FindByID(ctx, envID, repID)
 	}
 
-	return nil
+	digestData := map[string]any{"digestCount": len(notifIDs), "digestedIds": notifIDs}
+	planned := engine.EvaluateWorkflow(wf, subscriber, digestData, notif)
+
+	ref := stepRef{
+		EnvironmentID:  payload.EnvironmentID,
+		WorkflowID:     payload.WorkflowID,
+		NotificationID: notifIDs[0],
+		SubscriberID:   payload.SubscriberID,
+		Payload:        digestData,
+		Overrides:      payload.Overrides,
+	}
+	return scheduleSteps(ctx, h.asynq, h.rdb, planned, payload.StepIndex+1, ref, nil)
 }

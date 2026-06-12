@@ -77,8 +77,8 @@ func main() {
 	// Task handlers
 	triggerHandler := worker.NewTriggerHandler(wfRepo, subRepo, notifRepo, activityRepo, asynqClient, rdb, cfg.ActivityLogRetentionDays)
 	deliveryHandler := worker.NewDeliveryHandler(wfRepo, subRepo, intgRepo, notifRepo, activityRepo, prefRepo, rlRepo, factory, asynqClient, rdb, cfg.CredentialsEncryptionKeyBytes, cfg.RateLimitConfig, cfg.ActivityLogRetentionDays)
-	delayHandler := worker.NewDelayHandler(wfRepo, asynqClient)
-	digestHandler := worker.NewDigestHandler(notifRepo, wfRepo, asynqClient, rdb)
+	delayHandler := worker.NewDelayHandler(wfRepo, subRepo, notifRepo, asynqClient, rdb)
+	digestHandler := worker.NewDigestHandler(notifRepo, subRepo, wfRepo, asynqClient, rdb)
 	broadcastHandler := worker.NewBroadcastHandler(wfRepo, subRepo, notifRepo, asynqClient)
 
 	// Asynq worker

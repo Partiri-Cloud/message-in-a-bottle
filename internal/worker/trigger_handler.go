@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -70,6 +71,7 @@ func (h *TriggerHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 		return nil
 	}
 
+	var errs []error
 	for subIDStr, notifIDStr := range payload.SubscriberIDs {
 		subID, err := bson.ObjectIDFromHex(subIDStr)
 		if err != nil {
@@ -105,131 +107,34 @@ func (h *TriggerHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 
 		planned := engine.EvaluateWorkflow(wf, subscriber, payload.Payload, notif)
 
-		for _, ps := range planned {
-			if ps.Skipped {
-				h.activityRepo.Create(ctx, &model.ActivityLog{
-					EnvironmentID:  envID,
-					NotificationID: notif.ID,
-					SubscriberID:   subID,
-					Channel:        ps.Step.Type,
-					Event:          "step_skipped",
-					Detail:         map[string]any{"reason": ps.Reason, "stepIndex": ps.StepIndex},
-					ExpireAt:       time.Now().Add(time.Duration(h.retentionDays) * 24 * time.Hour),
-				})
-				continue
-			}
+		ref := stepRef{
+			EnvironmentID:  payload.EnvironmentID,
+			WorkflowID:     wf.ID.Hex(),
+			NotificationID: notif.ID.Hex(),
+			SubscriberID:   subscriber.ID.Hex(),
+			Payload:        payload.Payload,
+			Overrides:      payload.Overrides,
+		}
+		onSkip := func(ps engine.PlannedStep) {
+			h.activityRepo.Create(ctx, &model.ActivityLog{
+				EnvironmentID:  envID,
+				NotificationID: notif.ID,
+				SubscriberID:   subID,
+				Channel:        ps.Step.Type,
+				Event:          "step_skipped",
+				Detail:         map[string]any{"reason": ps.Reason, "stepIndex": ps.StepIndex},
+				ExpireAt:       time.Now().Add(time.Duration(h.retentionDays) * 24 * time.Hour),
+			})
+		}
 
-			switch ps.Step.Type {
-			case "delay":
-				if err := h.enqueueDelay(ps, notif, subscriber, wf, payload); err != nil {
-					log.Printf("failed to enqueue delay: %v", err)
-				}
-			case "digest":
-				if err := h.enqueueDigest(ctx, ps, notif, subscriber, wf, payload); err != nil {
-					log.Printf("failed to enqueue digest: %v", err)
-				}
-			default:
-				if err := h.enqueueDelivery(ps, notif, subscriber, payload); err != nil {
-					log.Printf("failed to enqueue delivery: %v", err)
-				}
-			}
+		if err := scheduleSteps(ctx, h.asynq, h.rdb, planned, 0, ref, onSkip); err != nil {
+			errs = append(errs, fmt.Errorf("subscriber %s: %w", subIDStr, err))
 		}
 	}
 
-	return nil
-}
-
-func (h *TriggerHandler) enqueueDelivery(ps engine.PlannedStep, notif *model.Notification, sub *model.Subscriber, payload TriggerPayload) error {
-	dp := DeliveryPayload{
-		EnvironmentID:  payload.EnvironmentID,
-		NotificationID: notif.ID.Hex(),
-		SubscriberID:   sub.ID.Hex(),
-		Channel:        ps.Step.Type,
-		StepIndex:      ps.StepIndex,
-		Payload:        payload.Payload,
-		Overrides:      payload.Overrides,
-		Attempt:        0,
-	}
-	data, err := json.Marshal(dp)
-	if err != nil {
-		return fmt.Errorf("marshal delivery payload: %w", err)
-	}
-	task := asynq.NewTask(TaskTypeDelivery, data)
-	_, err = h.asynq.Enqueue(task)
-	return err
-}
-
-func (h *TriggerHandler) enqueueDelay(ps engine.PlannedStep, notif *model.Notification, sub *model.Subscriber, wf *model.Workflow, payload TriggerPayload) error {
-	if ps.Step.DelayConfig == nil {
-		return nil
-	}
-	duration := ParseDuration(ps.Step.DelayConfig.Amount, ps.Step.DelayConfig.Unit)
-
-	dp := DelayPayload{
-		EnvironmentID:  payload.EnvironmentID,
-		NotificationID: notif.ID.Hex(),
-		SubscriberID:   sub.ID.Hex(),
-		WorkflowID:     wf.ID.Hex(),
-		StepIndex:      ps.StepIndex,
-		Payload:        payload.Payload,
-		Overrides:      payload.Overrides,
-	}
-	data, err := json.Marshal(dp)
-	if err != nil {
-		return fmt.Errorf("marshal delay payload: %w", err)
-	}
-	task := asynq.NewTask(TaskTypeDelay, data)
-	_, err = h.asynq.Enqueue(task, asynq.ProcessIn(duration))
-	return err
-}
-
-func (h *TriggerHandler) enqueueDigest(ctx context.Context, ps engine.PlannedStep, notif *model.Notification, sub *model.Subscriber, wf *model.Workflow, payload TriggerPayload) error {
-	if ps.Step.DigestConfig == nil {
-		return nil
-	}
-
-	// Include step index to prevent key collision when multiple digest steps share the same DigestKey string.
-	digestKey := fmt.Sprintf("digest:%s:%s:%d:%s:%s",
-		payload.EnvironmentID,
-		wf.ID.Hex(),
-		ps.StepIndex,
-		sub.ID.Hex(),
-		ps.Step.DigestConfig.DigestKey,
-	)
-
-	// Accumulate this notification's ID in the Redis list.
-	// RPUSH returns the list length after the push.
-	count, err := h.rdb.RPush(ctx, digestKey, notif.ID.Hex()).Result()
-	if err != nil {
-		return fmt.Errorf("rpush digest key: %w", err)
-	}
-
-	duration := ParseDuration(ps.Step.DigestConfig.Amount, ps.Step.DigestConfig.Unit)
-
-	if count == 1 {
-		// First notification in this window: set TTL and schedule the digest task.
-		// Add a small buffer so the key outlives the task.
-		h.rdb.Expire(ctx, digestKey, duration+5*time.Minute)
-
-		dp := DigestPayload{
-			EnvironmentID: payload.EnvironmentID,
-			WorkflowID:    wf.ID.Hex(),
-			SubscriberID:  sub.ID.Hex(),
-			Channel:       ps.Step.Type,
-			DigestKey:     ps.Step.DigestConfig.DigestKey,
-			StepIndex:     ps.StepIndex,
-		}
-		data, err := json.Marshal(dp)
-		if err != nil {
-			return fmt.Errorf("marshal digest payload: %w", err)
-		}
-		task := asynq.NewTask(TaskTypeDigest, data)
-		_, err = h.asynq.Enqueue(task, asynq.ProcessIn(duration))
-		return err
-	}
-
-	// count > 1: a digest task is already scheduled for this window; nothing more to do.
-	return nil
+	// Returning an error makes asynq retry the whole trigger task; deterministic
+	// task IDs plus the delivery handler's status guard make the re-run safe.
+	return errors.Join(errs...)
 }
 
 func ParseDuration(amount int, unit string) time.Duration {

@@ -44,12 +44,13 @@ type DeliveryPayload struct {
 }
 
 type DigestPayload struct {
-	EnvironmentID string `json:"environmentId"`
-	WorkflowID    string `json:"workflowId"`
-	SubscriberID  string `json:"subscriberId"`
-	Channel       string `json:"channel"`
-	DigestKey     string `json:"digestKey"`
-	StepIndex     int    `json:"stepIndex"`
+	EnvironmentID string         `json:"environmentId"`
+	WorkflowID    string         `json:"workflowId"`
+	SubscriberID  string         `json:"subscriberId"`
+	Channel       string         `json:"channel"`
+	DigestKey     string         `json:"digestKey"`
+	StepIndex     int            `json:"stepIndex"`
+	Overrides     map[string]any `json:"overrides,omitempty"`
 }
 
 type DelayPayload struct {
