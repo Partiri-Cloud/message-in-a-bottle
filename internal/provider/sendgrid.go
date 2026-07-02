@@ -38,5 +38,17 @@ func (p *SendGridProvider) Send(ctx context.Context, opts SendOptions) (SendResu
 	if resp.StatusCode >= 400 {
 		return SendResult{}, fmt.Errorf("sendgrid error: status %d, body: %s", resp.StatusCode, resp.Body)
 	}
-	return SendResult{ProviderMessageID: resp.Headers["X-Message-Id"][0]}, nil
+	return SendResult{ProviderMessageID: extractSendGridMessageID(resp.Headers)}, nil
+}
+
+// extractSendGridMessageID pulls the X-Message-Id header value out of a
+// SendGrid response, if present. A 2xx response is not guaranteed to carry
+// the header, so a missing key or an empty value slice yields an empty
+// message ID rather than panicking on a nil-slice index.
+func extractSendGridMessageID(headers map[string][]string) string {
+	values, ok := headers["X-Message-Id"]
+	if !ok || len(values) == 0 {
+		return ""
+	}
+	return values[0]
 }

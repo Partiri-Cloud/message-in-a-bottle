@@ -41,6 +41,15 @@ type DeliveryPayload struct {
 	Payload        map[string]any `json:"payload"`
 	Overrides      map[string]any `json:"overrides,omitempty"`
 	Attempt        int            `json:"attempt"`
+
+	// Transactional, RenderedSubject, and RenderedBody are set only by
+	// TemplateService.Send for direct template sends. They live outside Payload
+	// (the tenant's raw trigger event data for workflow-triggered notifications)
+	// so a workflow trigger payload can never spoof the transactional discriminator
+	// or inject rendered content.
+	Transactional   bool   `json:"transactional,omitempty"`
+	RenderedSubject string `json:"renderedSubject,omitempty"`
+	RenderedBody    string `json:"renderedBody,omitempty"`
 }
 
 type DigestPayload struct {
