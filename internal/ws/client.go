@@ -9,6 +9,7 @@ import (
 
 	"github.com/partiri-cloud/message-in-a-bottle/internal/repository"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"nhooyr.io/websocket"
 )
 
@@ -106,21 +107,42 @@ func (c *Client) handleMessage(ctx context.Context, msg ClientMessage) {
 		var p SeenPayload
 		json.Unmarshal(msg.Payload, &p)
 		if id, err := bson.ObjectIDFromHex(p.NotificationID); err == nil {
-			c.notifRepo.MarkSeen(ctx, id)
+			if err := c.notifRepo.MarkSeen(ctx, c.envID, c.subID, id); err != nil {
+				if err == mongo.ErrNoDocuments {
+					slog.Debug("mark seen: notification not found", "notificationId", p.NotificationID)
+				} else {
+					slog.Debug("mark seen failed", "error", err)
+				}
+				return
+			}
 			c.sendUnseenCount(ctx)
 		}
 	case ActionRead:
 		var p ReadPayload
 		json.Unmarshal(msg.Payload, &p)
 		if id, err := bson.ObjectIDFromHex(p.NotificationID); err == nil {
-			c.notifRepo.MarkRead(ctx, id)
+			if err := c.notifRepo.MarkRead(ctx, c.envID, c.subID, id); err != nil {
+				if err == mongo.ErrNoDocuments {
+					slog.Debug("mark read: notification not found", "notificationId", p.NotificationID)
+				} else {
+					slog.Debug("mark read failed", "error", err)
+				}
+				return
+			}
 			c.sendUnseenCount(ctx)
 		}
 	case ActionArchive:
 		var p ArchivePayload
 		json.Unmarshal(msg.Payload, &p)
 		if id, err := bson.ObjectIDFromHex(p.NotificationID); err == nil {
-			c.notifRepo.MarkArchived(ctx, id)
+			if err := c.notifRepo.MarkArchived(ctx, c.envID, c.subID, id); err != nil {
+				if err == mongo.ErrNoDocuments {
+					slog.Debug("mark archived: notification not found", "notificationId", p.NotificationID)
+				} else {
+					slog.Debug("mark archived failed", "error", err)
+				}
+				return
+			}
 		}
 	case ActionFetch:
 		var p FetchPayload

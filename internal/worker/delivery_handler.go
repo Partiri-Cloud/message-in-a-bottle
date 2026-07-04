@@ -80,10 +80,6 @@ func (h *DeliveryHandler) ProcessTask(ctx context.Context, t *asynq.Task) error 
 	if err != nil {
 		return fmt.Errorf("invalid subscriberId %q: %w", payload.SubscriberID, err)
 	}
-	notifID, err := bson.ObjectIDFromHex(payload.NotificationID)
-	if err != nil {
-		return fmt.Errorf("invalid notificationId %q: %w", payload.NotificationID, err)
-	}
 
 	// Load subscriber
 	subscriber, err := h.subRepo.FindByID(ctx, subID)
@@ -91,8 +87,19 @@ func (h *DeliveryHandler) ProcessTask(ctx context.Context, t *asynq.Task) error 
 		return fmt.Errorf("find subscriber: %w", err)
 	}
 
+	// Transactional (template) sends carry pre-rendered content and have no
+	// notification or workflow record to load — route them before those lookups.
+	if isTransactional(payload) {
+		return h.processTransactional(ctx, envID, subID, subscriber, payload)
+	}
+
+	notifID, err := bson.ObjectIDFromHex(payload.NotificationID)
+	if err != nil {
+		return fmt.Errorf("invalid notificationId %q: %w", payload.NotificationID, err)
+	}
+
 	// Load notification
-	notif, err := h.notifRepo.FindByID(ctx, notifID)
+	notif, err := h.notifRepo.FindByID(ctx, envID, notifID)
 	if err != nil {
 		return fmt.Errorf("find notification: %w", err)
 	}
@@ -152,7 +159,11 @@ func (h *DeliveryHandler) ProcessTask(ctx context.Context, t *asynq.Task) error 
 		return fmt.Errorf("create provider: %w", err)
 	}
 
-	step := wf.Steps[payload.StepIndex]
+	step, err := stepAt(wf, payload.StepIndex)
+	if err != nil {
+		log.Printf("step index error: %v", err)
+		return err
+	}
 	sendOpts := h.buildSendOptions(subscriber, step, payload.Payload, subscriber.Locale)
 
 	h.logActivity(ctx, envID, notifID, subID, payload.Channel, "provider_request", map[string]any{"providerId": intg.ProviderID})
@@ -161,19 +172,7 @@ func (h *DeliveryHandler) ProcessTask(ctx context.Context, t *asynq.Task) error 
 	if err != nil {
 		h.logActivity(ctx, envID, notifID, subID, payload.Channel, "provider_error", map[string]any{"error": err.Error()})
 
-		if payload.Attempt < MaxRetries {
-			payload.Attempt++
-			backoff := time.Duration(BackoffBaseMs) * time.Millisecond
-			for i := 0; i < payload.Attempt; i++ {
-				backoff *= time.Duration(BackoffMultiplier)
-			}
-			data, merr := json.Marshal(payload)
-			if merr != nil {
-				log.Printf("marshal retry payload: %v", merr)
-				return nil
-			}
-			task := asynq.NewTask(TaskTypeDelivery, data)
-			h.asynq.Enqueue(task, asynq.ProcessIn(backoff))
+		if h.scheduleRetry(&payload) {
 			h.logActivity(ctx, envID, notifID, subID, payload.Channel, "retry_scheduled", map[string]any{"attempt": payload.Attempt})
 			return nil
 		}
@@ -197,6 +196,172 @@ func (h *DeliveryHandler) ProcessTask(ctx context.Context, t *asynq.Task) error 
 		"providerMessageId": result.ProviderMessageID,
 	})
 
+	return nil
+}
+
+// isTransactional reports whether a delivery payload originated from a direct
+// template send (TemplateService.Send) rather than a workflow-triggered
+// notification. The discriminator lives on a dedicated top-level field set only
+// by TemplateService.Send — never on payload.Payload, which for the workflow
+// path is the tenant's raw trigger event data and must not be trusted to gate
+// this routing decision (a trigger payload containing "__transactional": true
+// must never be treated as transactional).
+func isTransactional(payload DeliveryPayload) bool {
+	return payload.Transactional
+}
+
+// recipientForChannel maps a subscriber's contact info to the destination address
+// used for transactional (template) sends. Channels with no subscriber-addressable
+// recipient are not supported for transactional delivery.
+func recipientForChannel(sub *model.Subscriber, channel string) (string, error) {
+	switch channel {
+	case "email":
+		if sub.Email == "" {
+			return "", fmt.Errorf("subscriber has no email address configured")
+		}
+		return sub.Email, nil
+	case "sms":
+		if sub.Phone == "" {
+			return "", fmt.Errorf("subscriber has no phone number configured")
+		}
+		return sub.Phone, nil
+	case "slack":
+		if sub.Channels.Slack.WebhookURL == "" {
+			return "", fmt.Errorf("subscriber has no slack webhook configured")
+		}
+		return sub.Channels.Slack.WebhookURL, nil
+	case "ms_teams":
+		if sub.Channels.MSTeams.WebhookURL == "" {
+			return "", fmt.Errorf("subscriber has no ms_teams webhook configured")
+		}
+		return sub.Channels.MSTeams.WebhookURL, nil
+	default:
+		return "", fmt.Errorf("unsupported transactional channel %q", channel)
+	}
+}
+
+// buildTransactionalSendOptions builds provider send options from the pre-rendered
+// subject/body a transactional delivery payload carries (no template step to
+// render against).
+func buildTransactionalSendOptions(to, renderedSubject, renderedBody string) provider.SendOptions {
+	return provider.SendOptions{
+		To:       to,
+		Subject:  renderedSubject,
+		Content:  renderedBody,
+		Metadata: make(map[string]any),
+	}
+}
+
+// skipRetryError wraps err so asynq dead-letters the task instead of retrying —
+// used for permanent transactional-delivery failures that have no notification
+// document to record a failed status against.
+func skipRetryError(err error) error {
+	return fmt.Errorf("%w: %w", err, asynq.SkipRetry)
+}
+
+// stepAt safely resolves wf.Steps[idx], guarding against a payload.StepIndex
+// that has gone stale relative to the current workflow (e.g. a delay step
+// holds a task for days while the workflow is edited to fewer steps). An
+// out-of-range index is a permanent condition — retrying the same payload
+// will never make the index valid again — so the error dead-letters the task
+// via asynq.SkipRetry instead of looping through retries.
+func stepAt(wf *model.Workflow, idx int) (model.WorkflowStep, error) {
+	if idx < 0 || idx >= len(wf.Steps) {
+		return model.WorkflowStep{}, skipRetryError(fmt.Errorf("step index %d out of range for workflow %s (%d steps)", idx, wf.ID.Hex(), len(wf.Steps)))
+	}
+	return wf.Steps[idx], nil
+}
+
+// nextRetryDelay reports whether another retry attempt is available for the given
+// current attempt count and, if so, the incremented attempt number and the backoff
+// duration to schedule it after. Pulled out of scheduleRetry so the attempt/backoff
+// arithmetic is unit-testable without a live asynq client.
+func nextRetryDelay(attempt int) (nextAttempt int, backoff time.Duration, ok bool) {
+	if attempt >= MaxRetries {
+		return attempt, 0, false
+	}
+	nextAttempt = attempt + 1
+	backoff = time.Duration(BackoffBaseMs) * time.Millisecond
+	for i := 0; i < nextAttempt; i++ {
+		backoff *= time.Duration(BackoffMultiplier)
+	}
+	return nextAttempt, backoff, true
+}
+
+// scheduleRetry re-enqueues the payload with backoff if attempts remain, mutating
+// payload.Attempt in place. It reports whether a retry was scheduled: false means
+// either attempts are exhausted or the retry payload could not be marshaled, and
+// callers must fall back to recording a permanent failure (workflow path: mark the
+// channel status "failed"; transactional path: dead-letter via asynq.SkipRetry).
+//
+// This is a deliberate change from the previous inline retry logic, which on a
+// marshal error returned nil straight out of ProcessTask — silently acking the
+// task with no failure recorded and no retry. Marshal failures here are expected
+// to be effectively unreachable (DeliveryPayload only holds JSON-safe types), but
+// if one ever occurs it should surface as a recorded failure rather than vanish.
+func (h *DeliveryHandler) scheduleRetry(payload *DeliveryPayload) bool {
+	nextAttempt, backoff, ok := nextRetryDelay(payload.Attempt)
+	if !ok {
+		return false
+	}
+	payload.Attempt = nextAttempt
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		log.Printf("marshal retry payload: %v", err)
+		return false
+	}
+	task := asynq.NewTask(TaskTypeDelivery, data)
+	h.asynq.Enqueue(task, asynq.ProcessIn(backoff))
+	return true
+}
+
+// processTransactional delivers a template send directly: no Notification or
+// Workflow document exists, so it resolves the primary integration for the
+// channel, builds SendOptions from the pre-rendered payload, and sends. Unlike
+// the workflow path there is no notification document to record status on, so
+// permanent failures dead-letter the task via asynq.SkipRetry instead of being
+// written to a status field.
+func (h *DeliveryHandler) processTransactional(ctx context.Context, envID, subID bson.ObjectID, sub *model.Subscriber, payload DeliveryPayload) error {
+	to, err := recipientForChannel(sub, payload.Channel)
+	if err != nil {
+		h.logActivity(ctx, envID, bson.NilObjectID, subID, payload.Channel, "provider_error", map[string]any{"error": err.Error()})
+		return skipRetryError(err)
+	}
+
+	intg, err := h.intgRepo.FindPrimaryByChannel(ctx, envID, payload.Channel)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			h.logActivity(ctx, envID, bson.NilObjectID, subID, payload.Channel, "provider_error", map[string]any{"error": "no integration configured"})
+			return skipRetryError(fmt.Errorf("no integration configured for channel %q", payload.Channel))
+		}
+		return fmt.Errorf("find integration: %w", err)
+	}
+
+	prov, err := h.factory.Create(intg, h.encKey)
+	if err != nil {
+		return fmt.Errorf("create provider: %w", err)
+	}
+
+	sendOpts := buildTransactionalSendOptions(to, payload.RenderedSubject, payload.RenderedBody)
+
+	h.logActivity(ctx, envID, bson.NilObjectID, subID, payload.Channel, "provider_request", map[string]any{"providerId": intg.ProviderID})
+
+	result, err := prov.Send(ctx, sendOpts)
+	if err != nil {
+		h.logActivity(ctx, envID, bson.NilObjectID, subID, payload.Channel, "provider_error", map[string]any{"error": err.Error()})
+
+		if h.scheduleRetry(&payload) {
+			h.logActivity(ctx, envID, bson.NilObjectID, subID, payload.Channel, "retry_scheduled", map[string]any{"attempt": payload.Attempt})
+			return nil
+		}
+
+		return skipRetryError(fmt.Errorf("transactional send failed after %d attempts: %w", payload.Attempt, err))
+	}
+
+	h.logActivity(ctx, envID, bson.NilObjectID, subID, payload.Channel, "provider_success", map[string]any{
+		"providerMessageId": result.ProviderMessageID,
+	})
 	return nil
 }
 
@@ -224,7 +389,11 @@ func (h *DeliveryHandler) deliverPush(ctx context.Context, envID, notifID, subID
 		return nil
 	}
 
-	step := wf.Steps[payload.StepIndex]
+	step, err := stepAt(wf, payload.StepIndex)
+	if err != nil {
+		log.Printf("step index error: %v", err)
+		return err
+	}
 	baseOpts := h.buildPushOptions(sub, step, payload.Payload, sub.Locale)
 
 	anySent := false
@@ -281,7 +450,11 @@ func (h *DeliveryHandler) deliverPush(ctx context.Context, envID, notifID, subID
 }
 
 func (h *DeliveryHandler) deliverInApp(ctx context.Context, envID, notifID, subID bson.ObjectID, notif *model.Notification, sub *model.Subscriber, wf *model.Workflow, payload DeliveryPayload) error {
-	step := wf.Steps[payload.StepIndex]
+	step, err := stepAt(wf, payload.StepIndex)
+	if err != nil {
+		log.Printf("step index error: %v", err)
+		return err
+	}
 	data := engine.TemplateData{
 		Subscriber: engine.TemplateSubscriber{
 			FirstName: sub.FirstName,

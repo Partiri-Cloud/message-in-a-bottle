@@ -8,6 +8,7 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/partiri-cloud/message-in-a-bottle/internal/engine"
 	"github.com/partiri-cloud/message-in-a-bottle/internal/repository"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/worker"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
@@ -68,23 +69,25 @@ func (s *TemplateService) Send(ctx context.Context, envID bson.ObjectID, identif
 		return fmt.Errorf("render body: %w", err)
 	}
 
-	// Enqueue delivery task directly (bypass workflow engine)
-	dp := map[string]any{
-		"environmentId":  envID.Hex(),
-		"notificationId": "", // no parent notification for transactional
-		"subscriberId":   sub.ID.Hex(),
-		"channel":        tmpl.Channel,
-		"stepIndex":      0,
-		"payload": map[string]any{
-			"__rendered_subject": subject,
-			"__rendered_body":    body,
-			"__transactional":    true,
-		},
-		"attempt": 0,
+	// Enqueue delivery task directly (bypass workflow engine). Transactional,
+	// RenderedSubject, and RenderedBody are dedicated DeliveryPayload fields, kept
+	// out of Payload (the caller-supplied template variables) so a workflow trigger
+	// payload can never spoof the transactional discriminator or inject content.
+	dp := worker.DeliveryPayload{
+		EnvironmentID:   envID.Hex(),
+		NotificationID:  "", // no parent notification for transactional
+		SubscriberID:    sub.ID.Hex(),
+		Channel:         tmpl.Channel,
+		StepIndex:       0,
+		Payload:         payload,
+		Attempt:         0,
+		Transactional:   true,
+		RenderedSubject: subject,
+		RenderedBody:    body,
 	}
 
 	taskData, _ := json.Marshal(dp)
-	task := asynq.NewTask("task:delivery", taskData)
+	task := asynq.NewTask(worker.TaskTypeDelivery, taskData)
 	_, err = s.asynq.Enqueue(task)
 	return err
 }
