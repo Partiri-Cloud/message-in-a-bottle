@@ -66,10 +66,9 @@ func (h *SubscriberHandler) Create(c *gin.Context) {
 			sub.Channels.MSTeams = model.MSTeamsConfig{WebhookURL: req.Channels.MSTeams.WebhookURL}
 		}
 	}
-	if sub.Locale == "" {
-		sub.Locale = "en"
-	}
-
+	// Locale is deliberately not defaulted here. This is an upsert: forcing "en"
+	// on a payload that omits locale would stomp the stored value every time the
+	// subscriber is re-posted. The repository seeds the default on insert only.
 	if err := h.subRepo.Upsert(c.Request.Context(), envID, sub); err != nil {
 		internalError(c, err)
 		return
@@ -99,10 +98,10 @@ func (h *SubscriberHandler) BulkCreate(c *gin.Context) {
 			Timezone:     s.Timezone,
 			Data:         s.Data,
 		}
-		if subs[i].Locale == "" {
-			subs[i].Locale = "en"
-		}
 	}
+	// Locale is deliberately not defaulted here, matching Create: BulkUpsert is
+	// an upsert, and forcing "en" onto a payload that omits locale would stomp
+	// the stored value on every re-post. The repository seeds it on insert.
 
 	if err := h.subRepo.BulkUpsert(c.Request.Context(), envID, subs); err != nil {
 		internalError(c, err)
@@ -117,6 +116,38 @@ func (h *SubscriberHandler) Get(c *gin.Context) {
 	subscriberID := c.Param("subscriberId")
 
 	sub, err := h.subRepo.FindBySubscriberID(c.Request.Context(), envID, subscriberID)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "subscriber not found"}})
+			return
+		}
+		internalError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": sub})
+}
+
+// RemovePushTokens unregisters device tokens.
+//
+// A subscriber upsert merges push tokens ($addToSet) so one device cannot evict
+// another's, which means it can only add. This is the other half: without it a
+// token from an uninstalled app lives forever and the worker keeps pushing to a
+// dead device. Removing a token the subscriber does not have is a no-op, so an
+// unregister call is safe to retry.
+func (h *SubscriberHandler) RemovePushTokens(c *gin.Context) {
+	var req dto.RemovePushTokensRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "VALIDATION_ERROR", "message": err.Error()}})
+		return
+	}
+	if len(req.FCMTokens) == 0 && len(req.APNSTokens) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "VALIDATION_ERROR", "message": "at least one token must be supplied"}})
+		return
+	}
+
+	envID := middleware.GetEnvironmentID(c)
+	sub, err := h.subRepo.RemovePushTokens(c.Request.Context(), envID, c.Param("subscriberId"), req.FCMTokens, req.APNSTokens)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "subscriber not found"}})
