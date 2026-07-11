@@ -58,7 +58,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `TriggerPayload.SubscriberIDs` changed from `[]string` to `map[string]string` (subscriberID → notificationID). The trigger worker now looks up each subscriber's own notification record directly by ID instead of using a shared `transactionId` query.
 - `BroadcastTaskPayload` added to both `service` and `worker` packages for the new async broadcast flow.
 - Condition evaluator `eq` / `ne` operators now use typed comparison: `nil` vs non-nil is always false, booleans are compared as booleans (not strings), and numbers are compared numerically. Only unrecognised types fall back to `fmt.Sprintf`.
-- SDK `publishConfig` registry changed from GitHub Packages to npmjs.com (`"access": "public"`), removing the authentication requirement for installation.
+- SDK is published to GitHub Packages under the renamed `@partiri-cloud` scope. The publish workflow authenticates with `GITHUB_TOKEN` (`packages: write`) instead of `NPM_TOKEN`, and scopes the registry to `@partiri-cloud` so public dependencies still resolve from npmjs. Consumers need an `.npmrc` mapping the scope to `https://npm.pkg.github.com` with a `read:packages` token — see the SDK README.
 
 ## [0.1.0] - 2026-04-24
 

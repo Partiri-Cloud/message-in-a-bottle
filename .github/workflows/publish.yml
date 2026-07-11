@@ -44,31 +44,38 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
 
   publish-sdk:
-    name: Publish SDK to npm
+    name: Publish SDK to GitHub Packages
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      packages: write
     defaults:
       run:
         working-directory: packages/sdk
     steps:
       - uses: actions/checkout@v5
 
+      # The registry is scoped to @partiri-cloud, not set as the default.
+      # GitHub Packages does not proxy npmjs, so making it the default registry
+      # would send `npm ci` there for every public dependency and fail.
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          registry-url: https://registry.npmjs.org
+          registry-url: https://npm.pkg.github.com
+          scope: '@partiri-cloud'
           cache: npm
           cache-dependency-path: packages/sdk/package-lock.json
 
       - run: npm ci
       - run: npm run build
 
-      - name: Publish release to npm
+      - name: Publish release to GitHub Packages
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # GITHUB_TOKEN carries the packages:write permission granted above;
+          # no separate NPM_TOKEN secret is needed.
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           PACKAGE_NAME=$(node -p "require('./package.json').name")
           VERSION=$(node -p "require('./package.json').version")
           npm view "${PACKAGE_NAME}@${VERSION}" version 2>/dev/null && echo "Version ${VERSION} already published, skipping" && exit 0
-          npm publish --access public
+          npm publish
