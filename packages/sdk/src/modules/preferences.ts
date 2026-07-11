@@ -13,15 +13,15 @@ import type { Preference, PreferenceUpdate } from '../types';
  *
  * @example
  * ```typescript
- * // Disable SMS globally
+ * // Disable SMS globally. Every other channel is left as it was.
  * await client.preferences.update({
  *   channels: { sms: false },
  * });
  *
- * // Enable only email for a specific workflow
+ * // Turn email off for one workflow, addressed by its identifier.
  * await client.preferences.update({
- *   workflowId: 'wf_order_updates',
- *   channels: { email: true, sms: false, push: false, inApp: false },
+ *   workflowIdentifier: 'deploy-started',
+ *   channels: { email: false },
  * });
  * ```
  */
@@ -36,11 +36,18 @@ export class PreferencesModule {
   }
 
   /**
-   * Fetches all notification preferences for the subscriber.
+   * Fetches the subscriber's effective notification settings.
    *
-   * Returns both global preferences and any workflow-specific overrides.
+   * Returns one entry per active workflow, plus one for the subscriber's global
+   * preference (identified by a null `workflowId`/`workflowIdentifier`). Each
+   * entry's `channels` are already resolved — workflow choice over global choice
+   * over the workflow's declared defaults — so a UI can render them directly.
    *
-   * @returns Array of preference records.
+   * Entries the subscriber has never touched are included with `explicit: false`
+   * and the inherited values. Do not treat a missing entry as "everything on":
+   * a workflow's defaults may well disable a channel.
+   *
+   * @returns One entry per active workflow, plus the global preference.
    */
   async list(): Promise<Preference[]> {
     const resp = await this.http.get<{ data: Preference[] }>(
@@ -52,22 +59,27 @@ export class PreferencesModule {
   /**
    * Updates notification preferences.
    *
-   * If `workflowId` is provided, the preferences apply to that workflow only.
-   * Otherwise, they are saved as global defaults.
+   * Scoped to a single workflow when `workflowIdentifier` or `workflowId` is
+   * given, otherwise saved as the subscriber's global defaults. Channels you
+   * omit keep their current value.
    *
    * @param prefs - The preference update payload.
    */
   async update(prefs: PreferenceUpdate): Promise<void> {
-    if (prefs.workflowId) {
-      await this.http.patch(
-        `/api/v1/subscribers/${this.subscriberId}/preferences/${prefs.workflowId}`,
-        { channels: prefs.channels },
-      );
-    } else {
-      await this.http.patch(
-        `/api/v1/subscribers/${this.subscriberId}/preferences`,
-        { channels: prefs.channels },
-      );
-    }
+    // The API accepts either form on this path; the identifier is what callers
+    // actually hold, since it is what a trigger carries.
+    //
+    // `||`, not `??`: an empty string is not a scope, and it must fall through to
+    // workflowId rather than win. With `??` it would win (it is not nullish) and
+    // then read as falsy below, silently sending a workflow-scoped update to the
+    // GLOBAL endpoint — turning one workflow's opt-out into one that applies
+    // everywhere. UI code writing `row.workflowIdentifier ?? ''` makes that real.
+    const workflow = prefs.workflowIdentifier || prefs.workflowId;
+
+    const path = workflow
+      ? `/api/v1/subscribers/${this.subscriberId}/preferences/${encodeURIComponent(workflow)}`
+      : `/api/v1/subscribers/${this.subscriberId}/preferences`;
+
+    await this.http.patch(path, { channels: prefs.channels });
   }
 }

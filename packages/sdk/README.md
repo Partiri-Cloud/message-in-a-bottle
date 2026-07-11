@@ -1,17 +1,17 @@
-# @partiri/message-in-a-bottle-sdk
+# @partiri-cloud/message-in-a-bottle-sdk
 
 Framework-agnostic TypeScript SDK for connecting to the Message in a Bottle notification platform.
 
 ## Install
 
 ```bash
-npm install @partiri/message-in-a-bottle-sdk
+npm install @partiri-cloud/message-in-a-bottle-sdk
 ```
 
 ## Quick start
 
 ```typescript
-import { NotificationClient } from '@partiri/message-in-a-bottle-sdk';
+import { NotificationClient } from '@partiri-cloud/message-in-a-bottle-sdk';
 
 const client = new NotificationClient({
   apiUrl: 'https://api.example.com',

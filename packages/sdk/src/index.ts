@@ -1,4 +1,5 @@
 export { NotificationClient } from './client';
+export { NotificationApiError } from './http';
 export type {
   ChannelDelivery,
   ChannelPreferences,
@@ -10,4 +11,5 @@ export type {
   PaginatedResponse,
   Preference,
   PreferenceUpdate,
+  ResolvedChannels,
 } from './types';

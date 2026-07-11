@@ -117,24 +117,69 @@ export interface ChannelPreferences {
 /**
  * Payload for updating subscriber notification preferences.
  *
- * If `workflowId` is provided, the preferences apply to that workflow only.
- * Otherwise, they are set as global defaults.
+ * Scope the update to a single workflow with `workflowIdentifier` (the slug a
+ * trigger carries, e.g. `deploy-started`) or `workflowId` (the raw ID).
+ *
+ * Omit both to update the subscriber's **global opt-out mask**. The mask can only
+ * silence a channel, never enable one: setting `sms: false` globally turns SMS
+ * off for every workflow the subscriber has no explicit preference on (an
+ * explicit workflow preference always wins), and setting `email: true` globally
+ * will not switch email on for a workflow whose defaults have it off. Use a
+ * workflow-scoped update for that.
+ *
+ * Only the channels you name are changed — omitted channels keep their current
+ * value, so `{ channels: { email: false } }` will not disturb in-app delivery.
+ *
+ * `channels` must name at least one channel: an empty object is rejected with
+ * `400`, because a preference row that changes nothing would still promote the
+ * subscriber from inheriting their settings to having chosen them.
  */
 export interface PreferenceUpdate {
+  /** Workflow identifier to scope the preference to. Preferred over `workflowId`. */
+  workflowIdentifier?: string;
   /** Workflow ID to scope the preference to. Omit for global preferences. */
   workflowId?: string;
-  /** Channel preferences to set. */
+  /** Channel preferences to set. Unlisted channels are left untouched, and at least one must be named. */
   channels: ChannelPreferences;
 }
 
-/** A stored notification preference record. */
+/**
+ * The effective state of every channel. Unlike {@link ChannelPreferences}, whose
+ * fields are optional because a *request* may name only the channels it changes,
+ * a response always carries all six — the server resolves them.
+ */
+export interface ResolvedChannels {
+  email: boolean;
+  sms: boolean;
+  push: boolean;
+  inApp: boolean;
+  slack: boolean;
+  msTeams: boolean;
+}
+
+/**
+ * A subscriber's notification settings for one workflow.
+ *
+ * `channels` holds the **effective** values — what will actually govern
+ * delivery, after the subscriber's workflow-specific choice, their global
+ * opt-out mask, and the workflow's own defaults have been resolved server-side.
+ * Render them as-is. A workflow whose defaults disable email reports
+ * `email: false` here even though the subscriber never touched it.
+ */
 export interface Preference {
-  /** Workflow ID this preference applies to, or `undefined` for global. */
-  workflowId?: string;
-  /** Channel preferences. */
-  channels: ChannelPreferences;
-  /** ISO 8601 timestamp when the preference was last updated. */
-  updatedAt: string;
+  /** Workflow ID this preference applies to, or `null` for the global preference. */
+  workflowId?: string | null;
+  /** Workflow identifier (e.g. `deploy-started`), or `null` for the global preference. */
+  workflowIdentifier?: string | null;
+  /** The effective channel settings for this workflow. Always all six. */
+  channels: ResolvedChannels;
+  /**
+   * Whether the subscriber has explicitly saved a choice here, as opposed to
+   * inheriting the workflow's defaults or their global preference.
+   */
+  explicit: boolean;
+  /** ISO 8601 timestamp of the subscriber's last change, or `null` if they never made one. */
+  updatedAt?: string | null;
 }
 
 /**
