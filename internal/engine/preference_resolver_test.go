@@ -15,11 +15,21 @@ func TestIsChannelEnabled_WorkflowPrefTakesPriority(t *testing.T) {
 	assert.False(t, IsChannelEnabled("email", wfPref, globalPref, defaults))
 }
 
-func TestIsChannelEnabled_GlobalPrefOverridesDefaults(t *testing.T) {
+// The global preference is an opt-out mask over the workflow defaults: it can
+// silence a channel the defaults had on, but never enable one they had off.
+func TestIsChannelEnabled_GlobalOptOutSilencesADefault(t *testing.T) {
+	globalPref := &model.SubscriberPreference{Channels: model.ChannelPrefs{SMS: false, Email: true}}
+	defaults := model.ChannelPrefs{SMS: true, Email: true}
+
+	assert.False(t, IsChannelEnabled("sms", nil, globalPref, defaults))
+	assert.True(t, IsChannelEnabled("email", nil, globalPref, defaults))
+}
+
+func TestIsChannelEnabled_GlobalPrefCannotEnableADisabledDefault(t *testing.T) {
 	globalPref := &model.SubscriberPreference{Channels: model.ChannelPrefs{SMS: true}}
 	defaults := model.ChannelPrefs{SMS: false}
 
-	assert.True(t, IsChannelEnabled("sms", nil, globalPref, defaults))
+	assert.False(t, IsChannelEnabled("sms", nil, globalPref, defaults))
 }
 
 func TestIsChannelEnabled_DefaultsUsedWhenNoPrefs(t *testing.T) {
@@ -42,7 +52,7 @@ func TestIsChannelEnabled_AllChannels(t *testing.T) {
 
 func TestIsChannelEnabled_NilWorkflowPref(t *testing.T) {
 	globalPref := &model.SubscriberPreference{Channels: model.ChannelPrefs{Slack: true}}
-	defaults := model.ChannelPrefs{Slack: false}
+	defaults := model.ChannelPrefs{Slack: true}
 
 	assert.True(t, IsChannelEnabled("slack", nil, globalPref, defaults))
 }
@@ -55,4 +65,20 @@ func TestIsChannelEnabled_NilBothPrefs(t *testing.T) {
 func TestIsChannelEnabled_UnknownChannel(t *testing.T) {
 	defaults := model.ChannelPrefs{Email: true}
 	assert.False(t, IsChannelEnabled("carrier_pigeon", nil, nil, defaults))
+}
+
+// ResolveChannelPrefs is what IsChannelEnabled resolves through, and what the
+// preferences read path reports. A workflow row wins outright; without one the
+// defaults apply, ANDed with the global opt-out mask.
+func TestResolveChannelPrefs_Precedence(t *testing.T) {
+	defaults := model.ChannelPrefs{InApp: true, Email: true}
+	// Mask allows email, silences everything else (including in-app).
+	globalPref := &model.SubscriberPreference{Channels: model.ChannelPrefs{Email: true}}
+	wfPref := &model.SubscriberPreference{Channels: model.ChannelPrefs{Push: true}}
+
+	assert.Equal(t, defaults, ResolveChannelPrefs(nil, nil, defaults))
+	assert.Equal(t, model.ChannelPrefs{Email: true}, ResolveChannelPrefs(nil, globalPref, defaults),
+		"defaults filtered through the mask: in-app silenced, email passes, nothing off gets enabled")
+	assert.Equal(t, wfPref.Channels, ResolveChannelPrefs(wfPref, globalPref, defaults),
+		"an explicit workflow row wins outright")
 }

@@ -2,36 +2,37 @@ package engine
 
 import "github.com/partiri-cloud/message-in-a-bottle/internal/model"
 
-func IsChannelEnabled(channel string, workflowPref *model.SubscriberPreference, globalPref *model.SubscriberPreference, workflowDefaults model.ChannelPrefs) bool {
-	// Priority: subscriber workflow-specific → subscriber global → workflow defaults
+// ResolveChannelPrefs returns the channel set that governs delivery for one
+// subscriber on one workflow.
+//
+// A workflow-specific preference row is the subscriber's most specific intent
+// and wins outright. ChannelPrefs is plain bools, so an unset channel is
+// indistinguishable from one explicitly set to false and there is nothing to
+// fall through on per channel within a workflow row.
+//
+// Without one, the workflow's declared defaults apply, filtered through the
+// subscriber's global preference: a per-channel opt-out mask that can silence
+// a channel the defaults had on, but never enable one they had off. Enabling a
+// channel a workflow chose not to send on is a workflow-level decision, made
+// by writing a workflow row.
+//
+// This is the single source of that precedence: delivery (IsChannelEnabled) and
+// the preferences read path both go through here, so what a subscriber is shown
+// cannot drift from what is used to route their notifications.
+func ResolveChannelPrefs(workflowPref, globalPref *model.SubscriberPreference, workflowDefaults model.ChannelPrefs) model.ChannelPrefs {
 	if workflowPref != nil {
-		if v, ok := getChannelPref(channel, workflowPref.Channels); ok {
-			return v
-		}
+		return workflowPref.Channels
 	}
 	if globalPref != nil {
-		if v, ok := getChannelPref(channel, globalPref.Channels); ok {
-			return v
-		}
+		return workflowDefaults.And(globalPref.Channels)
 	}
-	v, _ := getChannelPref(channel, workflowDefaults)
-	return v
+	return workflowDefaults
 }
 
-func getChannelPref(channel string, prefs model.ChannelPrefs) (bool, bool) {
-	switch channel {
-	case "email":
-		return prefs.Email, true
-	case "sms":
-		return prefs.SMS, true
-	case "push":
-		return prefs.Push, true
-	case "in_app":
-		return prefs.InApp, true
-	case "slack":
-		return prefs.Slack, true
-	case "ms_teams":
-		return prefs.MSTeams, true
-	}
-	return false, false
+// IsChannelEnabled reports whether a single channel is on for this subscriber
+// and workflow. channel is the delivery-side name ("in_app", "ms_teams", …); an
+// unknown name is not a channel and is never enabled.
+func IsChannelEnabled(channel string, workflowPref *model.SubscriberPreference, globalPref *model.SubscriberPreference, workflowDefaults model.ChannelPrefs) bool {
+	v, _ := ResolveChannelPrefs(workflowPref, globalPref, workflowDefaults).Get(channel)
+	return v
 }
