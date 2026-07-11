@@ -24,6 +24,14 @@ type PushDTO struct {
 	APNSTokens []string `json:"apnsTokens"`
 }
 
+// RemovePushTokensRequest unregisters device tokens. A subscriber upsert can only
+// add tokens (they merge, so one device cannot evict another's), so removal has
+// its own route. Tokens the subscriber does not have are ignored.
+type RemovePushTokensRequest struct {
+	FCMTokens  []string `json:"fcmTokens"`
+	APNSTokens []string `json:"apnsTokens"`
+}
+
 // SlackDTO carries the Slack incoming-webhook URL for a subscriber channel.
 // Non-empty values are validated against the SSRF allowlist in subscriber_handler.go
 // before being stored. Omitting the field (empty string) disables the channel.

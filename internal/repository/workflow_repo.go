@@ -49,6 +49,28 @@ func (r *WorkflowRepository) FindByIdentifier(ctx context.Context, envID bson.Ob
 	return &wf, nil
 }
 
+// FindAllActive returns every active workflow in the environment, unpaginated.
+//
+// The preferences read path needs all of them: a subscriber's effective settings
+// are only meaningful per workflow, and a workflow with no stored preference row
+// still has defaults that govern delivery. Paginating here would silently hide
+// workflows from the settings UI. Environments hold tens of workflows, not
+// thousands.
+func (r *WorkflowRepository) FindAllActive(ctx context.Context, envID bson.ObjectID) ([]model.Workflow, error) {
+	cursor, err := r.col.Find(ctx, bson.M{"environmentId": envID, "isActive": true},
+		options.Find().SetSort(bson.D{{Key: "identifier", Value: 1}}))
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var wfs []model.Workflow
+	if err := cursor.All(ctx, &wfs); err != nil {
+		return nil, err
+	}
+	return wfs, nil
+}
+
 func (r *WorkflowRepository) FindMany(ctx context.Context, envID bson.ObjectID, page, limit int) ([]model.Workflow, int64, error) {
 	filter := bson.M{"environmentId": envID}
 	total, err := r.col.CountDocuments(ctx, filter)

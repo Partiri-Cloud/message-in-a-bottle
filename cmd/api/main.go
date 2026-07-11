@@ -89,7 +89,7 @@ func main() {
 		Workflow:     handler.NewWorkflowHandler(wfRepo),
 		Integration:  handler.NewIntegrationHandler(intgRepo, cfg.CredentialsEncryptionKeyBytes),
 		Template:     handler.NewTemplateHandler(tmplRepo, tmplSvc),
-		Preference:   handler.NewPreferenceHandler(prefRepo, subRepo),
+		Preference:   handler.NewPreferenceHandler(prefRepo, subRepo, wfRepo),
 		Notification: handler.NewNotificationHandler(notifRepo, activityRepo, subRepo),
 		Event:        handler.NewEventHandler(triggerSvc),
 		Admin:        handler.NewAdminHandler(envRepo),
@@ -103,6 +103,7 @@ func main() {
 	}
 	router := gin.New()
 	router.Use(middleware.RequestID(), middleware.Logging(logger), gin.Recovery())
+	router.Use(middleware.CORS(cfg.CORSAllowedOrigins))
 	router.MaxMultipartMemory = cfg.MaxRequestBodyBytes
 	router.Use(func(c *gin.Context) {
 		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, cfg.MaxRequestBodyBytes)

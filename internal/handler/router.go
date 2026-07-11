@@ -48,6 +48,9 @@ func RegisterRoutes(router *gin.Engine, h *Handlers, envRepo *repository.Environ
 		sub.GET("/:subscriberId", middleware.RequirePermission("subscribers:read"), h.Subscriber.Get)
 		sub.PATCH("/:subscriberId", middleware.RequirePermission("subscribers:write"), h.Subscriber.Update)
 		sub.DELETE("/:subscriberId", middleware.RequirePermission("subscribers:write"), h.Subscriber.Delete)
+		// Push tokens merge on upsert (one device must not evict another's), so
+		// unregistering a device needs an operation of its own.
+		sub.POST("/:subscriberId/channels/push/tokens/remove", middleware.RequirePermission("subscribers:write"), h.Subscriber.RemovePushTokens)
 
 		// Subscriber-facing routes: require a valid subscriber token in addition to the API key.
 		// The token is validated against the URL's :subscriberId to prevent cross-subscriber access.

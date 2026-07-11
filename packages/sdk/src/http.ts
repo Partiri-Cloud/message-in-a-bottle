@@ -1,8 +1,28 @@
 /**
+ * Thrown when the API answers with a non-2xx status.
+ *
+ * Carries the status so callers can tell a permanent answer about their request
+ * (4xx) from a sign that the service is unhealthy (5xx). A transport failure —
+ * DNS, CORS, connection refused — surfaces as a plain `TypeError` from `fetch`
+ * instead, with no status at all.
+ */
+export class NotificationApiError extends Error {
+  /** HTTP status of the failed response. */
+  readonly status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'NotificationApiError';
+    this.status = status;
+  }
+}
+
+/**
  * Low-level HTTP client for making authenticated API requests.
  *
  * Attaches the API key and subscriber token headers to every request.
- * Automatically parses JSON responses and converts non-2xx responses into errors.
+ * Automatically parses JSON responses and converts non-2xx responses into
+ * {@link NotificationApiError}.
  *
  * @internal This class is not part of the public API. Use {@link NotificationClient} instead.
  */
@@ -90,9 +110,12 @@ export class HttpClient {
   private async handleError(resp: Response): Promise<Error> {
     try {
       const body = await resp.json();
-      return new Error(body.error?.message || `HTTP ${resp.status}`);
+      return new NotificationApiError(
+        resp.status,
+        body.error?.message || `HTTP ${resp.status}`,
+      );
     } catch {
-      return new Error(`HTTP ${resp.status}`);
+      return new NotificationApiError(resp.status, `HTTP ${resp.status}`);
     }
   }
 }
