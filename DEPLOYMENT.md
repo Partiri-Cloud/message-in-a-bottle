@@ -1022,7 +1022,17 @@ If empty, **all origins are accepted** -- this is not safe for production.
 
 ## SDK Integration
 
-A TypeScript client SDK is available in `packages/sdk/`. Install it in your project:
+A TypeScript client SDK is available in `packages/sdk/`. It is published to
+**GitHub Packages**, so the consuming project needs an `.npmrc` pointing the
+`@partiri-cloud` scope at GitHub's registry, authenticated with a token holding
+the `read:packages` scope:
+
+```
+@partiri-cloud:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
+```
+
+Then install it:
 
 ```bash
 npm install @partiri-cloud/message-in-a-bottle-sdk

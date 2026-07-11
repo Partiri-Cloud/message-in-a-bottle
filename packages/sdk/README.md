@@ -4,6 +4,19 @@ Framework-agnostic TypeScript SDK for connecting to the Message in a Bottle noti
 
 ## Install
 
+The package is published to **GitHub Packages**, not npmjs, so installing it
+takes one step of setup. Point the `@partiri-cloud` scope at GitHub's registry
+and authenticate with a personal access token that has the `read:packages`
+scope — add this to the `.npmrc` of the consuming project:
+
+```
+@partiri-cloud:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
+```
+
+Only the scope is redirected, so every other dependency still resolves from
+npmjs as usual. Then:
+
 ```bash
 npm install @partiri-cloud/message-in-a-bottle-sdk
 ```
