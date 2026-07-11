@@ -63,6 +63,7 @@ These must be set before starting any service.
 | `API_PORT` | `3000` | api | HTTP port for the REST API server. |
 | `WS_PORT` | `3001` | ws | HTTP port for the WebSocket server. |
 | `WS_ALLOWED_ORIGINS` | *(empty = all origins)* | ws | Comma-separated list of allowed WebSocket origins for CORS. **Must be set in production.** Example: `https://app.example.com,https://dashboard.example.com` |
+| `CORS_ALLOWED_ORIGINS` | *(empty = no CORS headers)* | api | Comma-separated allowlist of browser origins for the REST API. A single `*` allows any origin. When empty, no CORS headers are sent and the browser SDK cannot call the API from another origin. Example: `https://app.example.com,https://dashboard.example.com` |
 | `MAX_REQUEST_BODY_BYTES` | `2097152` (2 MB) | api | Maximum request body size. |
 
 ### Data Retention
@@ -82,7 +83,7 @@ These must be set before starting any service.
 
 | Service | Required Env Vars | Optional Env Vars |
 |---------|-------------------|-------------------|
-| **api** | `ADMIN_SECRET`, `CREDENTIALS_ENCRYPTION_KEY`, `MONGO_URI`, `REDIS_ADDR` | `API_PORT`, `MAX_REQUEST_BODY_BYTES` |
+| **api** | `ADMIN_SECRET`, `CREDENTIALS_ENCRYPTION_KEY`, `MONGO_URI`, `REDIS_ADDR` | `API_PORT`, `CORS_ALLOWED_ORIGINS`, `MAX_REQUEST_BODY_BYTES` |
 | **ws** | `SUBSCRIBER_HMAC_SECRET`, `MONGO_URI`, `REDIS_ADDR` | `WS_PORT`, `WS_ALLOWED_ORIGINS` |
 | **worker** | `CREDENTIALS_ENCRYPTION_KEY`, `MONGO_URI`, `REDIS_ADDR` | `NOTIFICATION_RETENTION_DAYS`, `ACTIVITY_LOG_RETENTION_DAYS`, `RATE_LIMIT_CONFIG` |
 
@@ -190,6 +191,7 @@ docker run -d -p 3000:3000 \
   -e REDIS_ADDR=<host>:<port> \
   -e ADMIN_SECRET=<secret> \
   -e CREDENTIALS_ENCRYPTION_KEY=<key> \
+  -e CORS_ALLOWED_ORIGINS=https://your-app.com \
   --entrypoint /api ghcr.io/partiri-cloud/message-in-a-bottle
 
 # WebSocket
@@ -1000,6 +1002,14 @@ base64({"subscriberId":"<id>","timestamp":<unix_ms>}).<hex-hmac-sha256-signature
 
 ### CORS
 
+Set `CORS_ALLOWED_ORIGINS` to allow browsers (the JS SDK, dashboards) to call the REST API from another origin:
+
+```
+CORS_ALLOWED_ORIGINS=https://app.example.com,https://dashboard.example.com
+```
+
+If empty, **no CORS headers are sent** (fail-closed) — server-to-server calls still work, but the browser SDK is blocked on any cross-origin page. A single `*` allows any origin.
+
 Set `WS_ALLOWED_ORIGINS` to restrict which origins can establish WebSocket connections:
 
 ```
@@ -1015,7 +1025,7 @@ If empty, **all origins are accepted** -- this is not safe for production.
 A TypeScript client SDK is available in `packages/sdk/`. Install it in your project:
 
 ```bash
-npm install @partiri/message-in-a-bottle-sdk
+npm install @partiri-cloud/message-in-a-bottle-sdk
 ```
 
 See the [SDK README](packages/sdk/README.md) for full API reference.
