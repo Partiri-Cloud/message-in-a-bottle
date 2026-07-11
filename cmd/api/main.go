@@ -89,7 +89,7 @@ func main() {
 		Workflow:     handler.NewWorkflowHandler(wfRepo),
 		Integration:  handler.NewIntegrationHandler(intgRepo, cfg.CredentialsEncryptionKeyBytes),
 		Template:     handler.NewTemplateHandler(tmplRepo, tmplSvc),
-		Preference:   handler.NewPreferenceHandler(prefRepo, subRepo),
+		Preference:   handler.NewPreferenceHandler(prefRepo, subRepo, wfRepo),
 		Notification: handler.NewNotificationHandler(notifRepo, activityRepo, subRepo),
 		Event:        handler.NewEventHandler(triggerSvc),
 		Admin:        handler.NewAdminHandler(envRepo),
