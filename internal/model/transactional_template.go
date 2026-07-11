@@ -7,16 +7,16 @@ import (
 )
 
 type TransactionalTemplate struct {
-	ID            bson.ObjectID     `bson:"_id,omitempty"`
-	EnvironmentID bson.ObjectID     `bson:"environmentId"`
-	Identifier    string            `bson:"identifier"`
-	Name          string            `bson:"name"`
-	Channel       string            `bson:"channel"`
-	Subject       map[string]string `bson:"subject"`
-	Body          map[string]string `bson:"body"`
-	DefaultLocale string            `bson:"defaultLocale"`
-	Variables     []string          `bson:"variables"`
-	IsActive      bool              `bson:"isActive"`
-	CreatedAt     time.Time         `bson:"createdAt"`
-	UpdatedAt     time.Time         `bson:"updatedAt"`
+	ID            bson.ObjectID     `bson:"_id,omitempty" json:"id"`
+	EnvironmentID bson.ObjectID     `bson:"environmentId" json:"environmentId"`
+	Identifier    string            `bson:"identifier"    json:"identifier"`
+	Name          string            `bson:"name"          json:"name"`
+	Channel       string            `bson:"channel"       json:"channel"`
+	Subject       map[string]string `bson:"subject"       json:"subject"`
+	Body          map[string]string `bson:"body"          json:"body"`
+	DefaultLocale string            `bson:"defaultLocale" json:"defaultLocale"`
+	Variables     []string          `bson:"variables"     json:"variables"`
+	IsActive      bool              `bson:"isActive"      json:"isActive"`
+	CreatedAt     time.Time         `bson:"createdAt"     json:"createdAt"`
+	UpdatedAt     time.Time         `bson:"updatedAt"     json:"updatedAt"`
 }
