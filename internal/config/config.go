@@ -30,6 +30,7 @@ type Config struct {
 	SubscriberHMACSecret          string
 
 	WSAllowedOrigins    []string
+	CORSAllowedOrigins  []string
 	MaxRequestBodyBytes int64
 
 	NotificationRetentionDays int
@@ -51,6 +52,7 @@ func Load() (*Config, error) {
 		CredentialsEncryptionKey:  getEnv("CREDENTIALS_ENCRYPTION_KEY", ""),
 		SubscriberHMACSecret:      getEnv("SUBSCRIBER_HMAC_SECRET", ""),
 		WSAllowedOrigins:          parseOrigins(getEnv("WS_ALLOWED_ORIGINS", "")),
+		CORSAllowedOrigins:        parseOrigins(getEnv("CORS_ALLOWED_ORIGINS", "")),
 		MaxRequestBodyBytes:       int64(getEnvInt("MAX_REQUEST_BODY_BYTES", 2*1024*1024)), // 2MB default
 		NotificationRetentionDays: getEnvInt("NOTIFICATION_RETENTION_DAYS", 90),
 		ActivityLogRetentionDays:  getEnvInt("ACTIVITY_LOG_RETENTION_DAYS", 30),

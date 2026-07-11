@@ -103,6 +103,7 @@ func main() {
 	}
 	router := gin.New()
 	router.Use(middleware.RequestID(), middleware.Logging(logger), gin.Recovery())
+	router.Use(middleware.CORS(cfg.CORSAllowedOrigins))
 	router.MaxMultipartMemory = cfg.MaxRequestBodyBytes
 	router.Use(func(c *gin.Context) {
 		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, cfg.MaxRequestBodyBytes)
