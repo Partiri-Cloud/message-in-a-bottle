@@ -125,7 +125,10 @@ func TestNotificationRepo_UnseenCount(t *testing.T) {
 			SubscriberID:  subID,
 			WorkflowID:    wfID,
 			TransactionID: bson.NewObjectID().Hex(),
-			ExpireAt:      time.Now().Add(90 * 24 * time.Hour),
+			// A delivered in_app step, as every notification in the feed has: the
+			// badge counts what the feed shows, and the feed is the in-app inbox.
+			Channels: []model.ChannelDelivery{{Channel: "in_app", Status: "sent"}},
+			ExpireAt: time.Now().Add(90 * 24 * time.Hour),
 		}
 		require.NoError(t, repo.Create(context.Background(), notif))
 	}
@@ -158,12 +161,15 @@ func TestNotificationRepo_FindFeed_FilterBySeen(t *testing.T) {
 			SubscriberID:  subID,
 			WorkflowID:    wfID,
 			TransactionID: bson.NewObjectID().Hex(),
-			ExpireAt:      time.Now().Add(90 * 24 * time.Hour),
+			// The feed only carries notifications whose in_app step was delivered.
+			Channels: []model.ChannelDelivery{{Channel: "in_app", Status: "sent"}},
+			ExpireAt: time.Now().Add(90 * 24 * time.Hour),
 		}
 		require.NoError(t, repo.Create(context.Background(), notif))
 	}
 
 	all, _, _ := repo.FindFeed(context.Background(), envID, subID, FeedFilter{}, 1, 10)
+	require.Len(t, all, 3)
 	repo.MarkSeen(context.Background(), envID, subID, all[0].ID)
 
 	f := false
@@ -484,8 +490,11 @@ func TestNotificationRepo_SetRenderedContent_IsReturnedByFeed(t *testing.T) {
 		WorkflowID:    bson.NewObjectID(),
 		TransactionID: "tx_rendered",
 		Payload:       map[string]any{"serviceName": "miab-api"},
-		Channels:      []model.ChannelDelivery{{Channel: "in_app", Status: "pending"}},
-		ExpireAt:      time.Now().Add(90 * 24 * time.Hour),
+		// "sent" is what the delivery handler sets on the in_app channel at the
+		// moment it renders and persists this text; a still-"pending" step has not
+		// been delivered and is deliberately not in the feed.
+		Channels: []model.ChannelDelivery{{Channel: "in_app", Status: "sent"}},
+		ExpireAt: time.Now().Add(90 * 24 * time.Hour),
 	}
 	require.NoError(t, repo.Create(context.Background(), notif))
 
@@ -515,4 +524,70 @@ func TestNotificationRepo_SetRenderedContent_IsReturnedByFeed(t *testing.T) {
 
 	assert.Equal(t, "Deployment succeeded", feed[0].Subject)
 	assert.Equal(t, "Service miab-api deployed successfully.", feed[0].Content)
+}
+
+// Reproduces what a real deploy produced: two workflows fire, one of which the
+// subscriber has switched off. The notification document is created for BOTH at
+// trigger time — before the worker evaluates preferences — so the disabled one
+// leaves a row with no rendered subject or content behind. It used to come back
+// from the feed as a blank entry with only a timestamp, and it counted toward the
+// unseen badge.
+func TestNotificationRepo_FindFeed_ExcludesUndeliveredInApp(t *testing.T) {
+	db, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	envID, _ := testutil.SeedEnvironmentDoc(t, db, "test-env")
+	subID := testutil.SeedSubscriberDoc(t, db, envID, "usr_feed_filter")
+	repo := NewNotificationRepository(db)
+	ctx := context.Background()
+
+	// deploy-succeeded: in_app delivered, rendered.
+	delivered := &model.Notification{
+		EnvironmentID: envID,
+		SubscriberID:  subID,
+		WorkflowID:    bson.NewObjectID(),
+		TransactionID: "tx_delivered",
+		Subject:       "Deployment succeeded",
+		Content:       "Service mcp deployed successfully.",
+		Channels:      []model.ChannelDelivery{{Channel: "in_app", Status: "sent"}},
+		ExpireAt:      time.Now().Add(90 * 24 * time.Hour),
+	}
+	require.NoError(t, repo.Create(ctx, delivered))
+
+	// deploy-started: subscriber disabled in_app, so the step was skipped and the
+	// row never got a subject or body.
+	skipped := &model.Notification{
+		EnvironmentID: envID,
+		SubscriberID:  subID,
+		WorkflowID:    bson.NewObjectID(),
+		TransactionID: "tx_skipped",
+		Channels:      []model.ChannelDelivery{{Channel: "in_app", Status: "skipped"}},
+		ExpireAt:      time.Now().Add(90 * 24 * time.Hour),
+	}
+	require.NoError(t, repo.Create(ctx, skipped))
+
+	// An email-only notification has no in_app step at all and must never surface
+	// in the in-app inbox either.
+	emailOnly := &model.Notification{
+		EnvironmentID: envID,
+		SubscriberID:  subID,
+		WorkflowID:    bson.NewObjectID(),
+		TransactionID: "tx_email_only",
+		Channels:      []model.ChannelDelivery{{Channel: "email", Status: "sent"}},
+		ExpireAt:      time.Now().Add(90 * 24 * time.Hour),
+	}
+	require.NoError(t, repo.Create(ctx, emailOnly))
+
+	feed, total, err := repo.FindFeed(ctx, envID, subID, FeedFilter{}, 1, 10)
+	require.NoError(t, err)
+
+	require.Equal(t, int64(1), total, "only the delivered in_app notification belongs in the feed")
+	require.Len(t, feed, 1)
+	assert.Equal(t, "Deployment succeeded", feed[0].Subject)
+	assert.Equal(t, "Service mcp deployed successfully.", feed[0].Content)
+
+	// The badge must agree with the feed, or it shows a count the user cannot clear.
+	count, err := repo.UnseenCount(ctx, envID, subID)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), count)
 }

@@ -96,6 +96,47 @@ func (r *IntegrationRepository) FindAllActiveByChannel(ctx context.Context, envI
 	return integrations, nil
 }
 
+// AvailableChannels reports which channels this environment can actually
+// deliver on, so a client does not offer a subscriber a channel that will fail.
+//
+// The rules mirror DeliveryHandler exactly, and must keep mirroring it:
+//   - in_app needs no integration at all — it is published over Redis to the
+//     WebSocket hub.
+//   - push fans out across every active integration (FCM and/or APNS), so any
+//     active one makes it deliverable.
+//   - every other channel resolves a single primary integration
+//     (FindPrimaryByChannel), so it needs an active *primary*.
+//
+// A channel with no integration does not fail loudly at delivery: the worker
+// marks it "failed — no integration configured" and moves on, which is invisible
+// to the subscriber who enabled it.
+func (r *IntegrationRepository) AvailableChannels(ctx context.Context, envID bson.ObjectID) (model.ChannelPrefs, error) {
+	var avail model.ChannelPrefs
+	avail.Set("in_app", true)
+
+	cursor, err := r.col.Find(ctx, bson.M{
+		"environmentId": envID,
+		"isActive":      true,
+	})
+	if err != nil {
+		return avail, err
+	}
+	defer cursor.Close(ctx)
+
+	var integrations []model.Integration
+	if err := cursor.All(ctx, &integrations); err != nil {
+		return avail, err
+	}
+
+	for _, intg := range integrations {
+		if intg.Channel == "push" || intg.IsPrimary {
+			avail.Set(intg.Channel, true)
+		}
+	}
+
+	return avail, nil
+}
+
 func (r *IntegrationRepository) Update(ctx context.Context, envID, id bson.ObjectID, intg *model.Integration) error {
 	intg.UpdatedAt = time.Now()
 	_, err := r.col.ReplaceOne(ctx, bson.M{"_id": id, "environmentId": envID}, intg)

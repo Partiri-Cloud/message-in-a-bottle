@@ -13,6 +13,7 @@ import (
 	"github.com/partiri-cloud/message-in-a-bottle/internal/model"
 	"github.com/partiri-cloud/message-in-a-bottle/internal/provider"
 	"github.com/partiri-cloud/message-in-a-bottle/internal/repository"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/ws"
 	"github.com/redis/go-redis/v9"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -498,9 +499,11 @@ func (h *DeliveryHandler) deliverInApp(ctx context.Context, envID, notifID, subI
 	}
 	h.notifRepo.UpdateChannelStatus(ctx, notifID, "in_app", "sent", bson.M{"sentAt": now})
 
+	room := fmt.Sprintf("env:%s:sub:%s", envID.Hex(), subID.Hex())
+
 	wsMsg, _ := json.Marshal(map[string]any{
-		"room":  fmt.Sprintf("env:%s:sub:%s", envID.Hex(), subID.Hex()),
-		"event": "notification:new",
+		"room":  room,
+		"event": ws.EventNotificationNew,
 		"data": map[string]any{
 			"id":        notifID.Hex(),
 			"subject":   subject,
@@ -510,6 +513,22 @@ func (h *DeliveryHandler) deliverInApp(ctx context.Context, envID, notifID, subI
 		},
 	})
 	h.rdb.Publish(ctx, "ws:notifications", wsMsg)
+
+	// The unseen count has to be pushed too. The ws server only recomputes it in
+	// response to a client seen/read/archive action, so on delivery nothing ever
+	// updated it: the notification arrived live, but the badge kept whatever
+	// value it was given on page load. That is why a new notification appeared
+	// to require a refresh even with the WebSocket connected.
+	if count, err := h.notifRepo.UnseenCount(ctx, envID, subID); err == nil {
+		countMsg, _ := json.Marshal(map[string]any{
+			"room":  room,
+			"event": ws.EventUnseenCount,
+			"data":  map[string]any{"count": count},
+		})
+		h.rdb.Publish(ctx, "ws:notifications", countMsg)
+	} else {
+		log.Printf("failed to read unseen count for %s: %v", subID.Hex(), err)
+	}
 
 	h.logActivity(ctx, envID, notifID, subID, "in_app", "provider_success", nil)
 	return nil
