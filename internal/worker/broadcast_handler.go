@@ -14,6 +14,10 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
+// broadcastBatchSize is how many subscribers each notification-creation batch
+// (and its trigger task) covers.
+const broadcastBatchSize = 100
+
 type BroadcastHandler struct {
 	wfRepo    *repository.WorkflowRepository
 	subRepo   *repository.SubscriberRepository
@@ -62,19 +66,23 @@ func (h *BroadcastHandler) ProcessTask(ctx context.Context, t *asynq.Task) error
 
 	expireAt := time.Now().Add(time.Duration(payload.RetentionDays) * 24 * time.Hour)
 
-	page := 1
+	// Walk the audience with an _id cursor rather than skip-based pages:
+	// skip re-scans every earlier page on each request, turning a
+	// full-environment broadcast into an O(n²) sweep as the audience grows.
+	var lastID bson.ObjectID
 	for {
-		subs, _, err := h.subRepo.FindMany(ctx, envID, page, 100)
+		subs, err := h.subRepo.FindPageAfter(ctx, envID, lastID, broadcastBatchSize)
 		if err != nil {
-			return fmt.Errorf("paginate subscribers page %d: %w", page, err)
+			return fmt.Errorf("list subscribers after %s: %w", lastID.Hex(), err)
 		}
 		if len(subs) == 0 {
 			break
 		}
+		lastID = subs[len(subs)-1].ID
 
 		notifIDMap := make(map[string]string, len(subs))
 		for _, sub := range subs {
-			channels := buildChannelDeliveries(wf.Steps)
+			channels := BuildChannelDeliveries(wf.Steps)
 			notif := &model.Notification{
 				EnvironmentID: envID,
 				SubscriberID:  sub.ID,
@@ -96,7 +104,6 @@ func (h *BroadcastHandler) ProcessTask(ctx context.Context, t *asynq.Task) error
 		}
 
 		if len(notifIDMap) == 0 {
-			page++
 			continue
 		}
 
@@ -116,23 +123,7 @@ func (h *BroadcastHandler) ProcessTask(ctx context.Context, t *asynq.Task) error
 		if _, err := h.asynq.Enqueue(task); err != nil {
 			return fmt.Errorf("enqueue trigger task for broadcast batch: %w", err)
 		}
-
-		page++
 	}
 
 	return nil
-}
-
-func buildChannelDeliveries(steps []model.WorkflowStep) []model.ChannelDelivery {
-	channels := make([]model.ChannelDelivery, 0, len(steps))
-	for _, step := range steps {
-		if step.Type == "delay" || step.Type == "digest" {
-			continue
-		}
-		channels = append(channels, model.ChannelDelivery{
-			Channel: step.Type,
-			Status:  "pending",
-		})
-	}
-	return channels
 }

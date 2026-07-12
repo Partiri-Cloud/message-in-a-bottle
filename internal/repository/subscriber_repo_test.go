@@ -417,3 +417,82 @@ func TestSubscriberRepo_SetOnlineStatus(t *testing.T) {
 	assert.True(t, found.IsOnline)
 	assert.NotNil(t, found.LastOnlineAt)
 }
+
+func TestSubscriberRepo_Update(t *testing.T) {
+	db, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	envID, _ := testutil.SeedEnvironmentDoc(t, db, "test-env")
+	repo := NewSubscriberRepository(db)
+
+	sub := &model.Subscriber{SubscriberID: "usr_upd", FirstName: "Alice", Locale: "en"}
+	require.NoError(t, repo.Upsert(context.Background(), envID, sub))
+
+	err := repo.Update(context.Background(), envID, "usr_upd", bson.M{"firstName": "Alicia"})
+	require.NoError(t, err)
+
+	found, err := repo.FindBySubscriberID(context.Background(), envID, "usr_upd")
+	require.NoError(t, err)
+	assert.Equal(t, "Alicia", found.FirstName)
+}
+
+func TestSubscriberRepo_Update_UnknownSubscriber(t *testing.T) {
+	db, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	envID, _ := testutil.SeedEnvironmentDoc(t, db, "test-env")
+	repo := NewSubscriberRepository(db)
+
+	err := repo.Update(context.Background(), envID, "nonexistent", bson.M{"firstName": "Ghost"})
+	assert.ErrorIs(t, err, mongo.ErrNoDocuments)
+}
+
+func TestSubscriberRepo_FindPageAfter_WalksAllWithoutDuplicates(t *testing.T) {
+	db, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	envID, _ := testutil.SeedEnvironmentDoc(t, db, "test-env")
+	repo := NewSubscriberRepository(db)
+
+	for i := 0; i < 5; i++ {
+		sub := &model.Subscriber{SubscriberID: bson.NewObjectID().Hex(), Locale: "en"}
+		require.NoError(t, repo.Upsert(context.Background(), envID, sub))
+	}
+
+	seen := make(map[bson.ObjectID]bool)
+	var lastID bson.ObjectID
+	pages := 0
+	for {
+		subs, err := repo.FindPageAfter(context.Background(), envID, lastID, 2)
+		require.NoError(t, err)
+		if len(subs) == 0 {
+			break
+		}
+		pages++
+		for _, s := range subs {
+			assert.False(t, seen[s.ID], "subscriber returned twice")
+			seen[s.ID] = true
+		}
+		lastID = subs[len(subs)-1].ID
+	}
+
+	assert.Len(t, seen, 5)
+	assert.Equal(t, 3, pages)
+}
+
+func TestSubscriberRepo_FindPageAfter_ScopedToEnvironment(t *testing.T) {
+	db, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	envA, _ := testutil.SeedEnvironmentDoc(t, db, "env-a")
+	envB, _ := testutil.SeedEnvironmentDoc(t, db, "env-b")
+	repo := NewSubscriberRepository(db)
+
+	require.NoError(t, repo.Upsert(context.Background(), envA, &model.Subscriber{SubscriberID: "usr_a", Locale: "en"}))
+	require.NoError(t, repo.Upsert(context.Background(), envB, &model.Subscriber{SubscriberID: "usr_b", Locale: "en"}))
+
+	subs, err := repo.FindPageAfter(context.Background(), envA, bson.ObjectID{}, 10)
+	require.NoError(t, err)
+	require.Len(t, subs, 1)
+	assert.Equal(t, "usr_a", subs[0].SubscriberID)
+}

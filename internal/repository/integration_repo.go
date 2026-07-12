@@ -168,7 +168,3 @@ func (r *IntegrationRepository) Delete(ctx context.Context, envID, id bson.Objec
 	_, err := r.col.DeleteOne(ctx, bson.M{"_id": id, "environmentId": envID})
 	return err
 }
-
-func (r *IntegrationRepository) Collection() *mongo.Collection {
-	return r.col
-}

@@ -1,5 +1,14 @@
 package worker
 
+import (
+	"encoding/json"
+	"log"
+
+	"github.com/hibiken/asynq"
+
+	"github.com/partiri-cloud/message-in-a-bottle/internal/model"
+)
+
 const (
 	TaskTypeTrigger   = "task:trigger"
 	TaskTypeDelivery  = "task:delivery"
@@ -69,4 +78,56 @@ type DelayPayload struct {
 	StepIndex      int            `json:"stepIndex"`
 	Payload        map[string]any `json:"payload"`
 	Overrides      map[string]any `json:"overrides,omitempty"`
+}
+
+// IsControlStep reports whether a workflow step gates the flow of the steps
+// after it (delay/digest) rather than delivering on a channel.
+func IsControlStep(stepType string) bool {
+	return stepType == "delay" || stepType == "digest"
+}
+
+// BuildChannelDeliveries returns a pending delivery-status row for every
+// channel step in the workflow, skipping control steps.
+func BuildChannelDeliveries(steps []model.WorkflowStep) []model.ChannelDelivery {
+	channels := make([]model.ChannelDelivery, 0, len(steps))
+	for _, step := range steps {
+		if IsControlStep(step.Type) {
+			continue
+		}
+		channels = append(channels, model.ChannelDelivery{
+			Channel: step.Type,
+			Status:  "pending",
+		})
+	}
+	return channels
+}
+
+// enqueueFollowingDeliveries resumes a workflow after a control step fires:
+// it enqueues a delivery task for each channel step after fromIndex, using
+// base for everything but Channel and StepIndex. The trigger handler stops
+// planning at the first control step, so these steps were never enqueued.
+//
+// A second control step ends the run: neither the delay nor the digest
+// handler can re-schedule one (chained control steps are not supported), so
+// it is logged loudly instead of silently dropped.
+func enqueueFollowingDeliveries(client *asynq.Client, wf *model.Workflow, fromIndex int, origin string, base DeliveryPayload) {
+	for i := fromIndex + 1; i < len(wf.Steps); i++ {
+		step := wf.Steps[i]
+		if IsControlStep(step.Type) {
+			log.Printf("%s: workflow %s chains another control step (%s) at index %d; chained control steps are not supported, steps beyond it will not run", origin, wf.Identifier, step.Type, i)
+			break
+		}
+
+		dp := base
+		dp.Channel = step.Type
+		dp.StepIndex = i
+		data, err := json.Marshal(dp)
+		if err != nil {
+			log.Printf("failed to marshal %s delivery step %d: %v", origin, i, err)
+			continue
+		}
+		if _, err := client.Enqueue(asynq.NewTask(TaskTypeDelivery, data)); err != nil {
+			log.Printf("failed to enqueue %s delivery step %d: %v", origin, i, err)
+		}
+	}
 }

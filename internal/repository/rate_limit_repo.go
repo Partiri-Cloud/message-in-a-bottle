@@ -51,7 +51,3 @@ func (r *RateLimitRepository) IncrementAndCheck(ctx context.Context, envID, subs
 
 	return record.Count > maxPerWindow, nil
 }
-
-func (r *RateLimitRepository) Collection() *mongo.Collection {
-	return r.col
-}

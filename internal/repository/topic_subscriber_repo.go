@@ -99,7 +99,3 @@ func (r *TopicSubscriberRepository) DeleteBySubscriber(ctx context.Context, subs
 	_, err := r.col.DeleteMany(ctx, bson.M{"subscriberId": subscriberID})
 	return err
 }
-
-func (r *TopicSubscriberRepository) Collection() *mongo.Collection {
-	return r.col
-}

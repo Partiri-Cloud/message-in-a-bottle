@@ -7,15 +7,17 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/coder/websocket"
 	"github.com/partiri-cloud/message-in-a-bottle/internal/repository"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
-	"nhooyr.io/websocket"
 )
 
 const (
+	// writeWait bounds every write and ping. The library closes the connection
+	// when the operation's context expires, so a half-open peer that stops
+	// acking is reaped instead of blocking the pumps until process shutdown.
 	writeWait  = 10 * time.Second
-	pongWait   = 60 * time.Second
 	pingPeriod = 30 * time.Second
 	maxMsgSize = 4096
 	sendBufLen = 64
@@ -46,6 +48,7 @@ func NewClient(conn *websocket.Conn, hub *Hub, room string, envID, subID bson.Ob
 }
 
 func (c *Client) Run(ctx context.Context) {
+	c.conn.SetReadLimit(maxMsgSize)
 	go c.writePump(ctx)
 	c.readPump(ctx)
 }
@@ -88,11 +91,17 @@ func (c *Client) writePump(ctx context.Context) {
 			if !ok {
 				return
 			}
-			if err := c.conn.Write(ctx, websocket.MessageText, msg); err != nil {
+			wctx, cancel := context.WithTimeout(ctx, writeWait)
+			err := c.conn.Write(wctx, websocket.MessageText, msg)
+			cancel()
+			if err != nil {
 				return
 			}
 		case <-ticker.C:
-			if err := c.conn.Ping(ctx); err != nil {
+			wctx, cancel := context.WithTimeout(ctx, writeWait)
+			err := c.conn.Ping(wctx)
+			cancel()
+			if err != nil {
 				return
 			}
 		case <-ctx.Done():

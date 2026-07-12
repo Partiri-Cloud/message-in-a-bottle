@@ -197,7 +197,7 @@ func (h *SubscriberHandler) Update(c *gin.Context) {
 	}
 
 	if err := h.subRepo.Update(c.Request.Context(), envID, subscriberID, update); err != nil {
-		internalError(c, err)
+		respondSubscriberErr(c, err)
 		return
 	}
 

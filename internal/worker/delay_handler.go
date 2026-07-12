@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 
 	"github.com/hibiken/asynq"
 	"github.com/partiri-cloud/message-in-a-bottle/internal/repository"
@@ -40,32 +39,14 @@ func (h *DelayHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 	}
 
 	// Enqueue subsequent steps after the delay step
-	for i := payload.StepIndex + 1; i < len(wf.Steps); i++ {
-		step := wf.Steps[i]
-		if step.Type == "delay" || step.Type == "digest" {
-			break // Stop at next control step
-		}
-
-		dp := DeliveryPayload{
-			EnvironmentID:  payload.EnvironmentID,
-			NotificationID: payload.NotificationID,
-			SubscriberID:   payload.SubscriberID,
-			Channel:        step.Type,
-			StepIndex:      i,
-			Payload:        payload.Payload,
-			Overrides:      payload.Overrides,
-			Attempt:        0,
-		}
-		data, merr := json.Marshal(dp)
-		if merr != nil {
-			log.Printf("failed to marshal post-delay delivery step %d: %v", i, merr)
-			continue
-		}
-		task := asynq.NewTask(TaskTypeDelivery, data)
-		if _, err := h.asynq.Enqueue(task); err != nil {
-			log.Printf("failed to enqueue post-delay delivery step %d: %v", i, err)
-		}
-	}
+	enqueueFollowingDeliveries(h.asynq, wf, payload.StepIndex, "post-delay", DeliveryPayload{
+		EnvironmentID:  payload.EnvironmentID,
+		NotificationID: payload.NotificationID,
+		SubscriberID:   payload.SubscriberID,
+		Payload:        payload.Payload,
+		Overrides:      payload.Overrides,
+		Attempt:        0,
+	})
 
 	return nil
 }

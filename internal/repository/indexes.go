@@ -30,6 +30,8 @@ func EnsureIndexes(ctx context.Context, db *mongo.Database) error {
 		"subscribers": {
 			{Keys: bson.D{{Key: "environmentId", Value: 1}, {Key: "subscriberId", Value: 1}}, Options: unique()},
 			{Keys: bson.D{{Key: "environmentId", Value: 1}, {Key: "email", Value: 1}}},
+			// Serves the broadcast _id-cursor walk (FindPageAfter).
+			{Keys: bson.D{{Key: "environmentId", Value: 1}, {Key: "_id", Value: 1}}},
 		},
 		"topics": {
 			{Keys: bson.D{{Key: "environmentId", Value: 1}, {Key: "key", Value: 1}}, Options: unique()},

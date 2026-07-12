@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"regexp"
 	"time"
 
 	"github.com/partiri-cloud/message-in-a-bottle/internal/model"
@@ -65,7 +66,9 @@ func (r *TopicRepository) FindOrCreate(ctx context.Context, envID bson.ObjectID,
 func (r *TopicRepository) FindMany(ctx context.Context, envID bson.ObjectID, keyPrefix string, page, limit int) ([]model.Topic, int64, error) {
 	filter := bson.M{"environmentId": envID}
 	if keyPrefix != "" {
-		filter["key"] = bson.M{"$regex": "^" + keyPrefix}
+		// QuoteMeta keeps the caller-supplied prefix literal: a key like
+		// "workspace-*" must not turn into a wildcard match.
+		filter["key"] = bson.M{"$regex": "^" + regexp.QuoteMeta(keyPrefix)}
 	}
 
 	total, err := r.col.CountDocuments(ctx, filter)
@@ -92,18 +95,20 @@ func (r *TopicRepository) FindMany(ctx context.Context, envID bson.ObjectID, key
 }
 
 func (r *TopicRepository) UpdateName(ctx context.Context, envID bson.ObjectID, key, name string) error {
-	_, err := r.col.UpdateOne(ctx,
+	res, err := r.col.UpdateOne(ctx,
 		bson.M{"environmentId": envID, "key": key},
 		bson.M{"$set": bson.M{"name": name, "updatedAt": time.Now()}},
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
 }
 
 func (r *TopicRepository) Delete(ctx context.Context, envID bson.ObjectID, key string) error {
 	_, err := r.col.DeleteOne(ctx, bson.M{"environmentId": envID, "key": key})
 	return err
-}
-
-func (r *TopicRepository) Collection() *mongo.Collection {
-	return r.col
 }

@@ -4,9 +4,8 @@ import "encoding/json"
 
 // Server → client events
 const (
-	EventNotificationNew     = "notification:new"
-	EventNotificationUpdated = "notification:updated"
-	EventUnseenCount         = "notification:unseen_count"
+	EventNotificationNew = "notification:new"
+	EventUnseenCount     = "notification:unseen_count"
 )
 
 // Client → server actions

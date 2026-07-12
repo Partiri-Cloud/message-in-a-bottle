@@ -18,7 +18,3 @@ func NewPresenceTracker(subRepo *repository.SubscriberRepository) *PresenceTrack
 func (p *PresenceTracker) SetOnline(ctx context.Context, subID bson.ObjectID) {
 	p.subRepo.SetOnlineStatus(ctx, subID, true)
 }
-
-func (p *PresenceTracker) SetOffline(ctx context.Context, subID bson.ObjectID) {
-	p.subRepo.SetOnlineStatus(ctx, subID, false)
-}

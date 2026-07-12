@@ -265,13 +265,47 @@ func (r *SubscriberRepository) FindMany(ctx context.Context, envID bson.ObjectID
 	return subs, total, nil
 }
 
+// FindPageAfter returns up to limit subscribers of the environment with IDs
+// greater than afterID, in _id order. Passing the zero ObjectID starts from
+// the beginning. Unlike skip-based pagination, walking pages this way stays
+// indexed no matter how deep the walk gets — a full-environment sweep is O(n)
+// instead of re-scanning every earlier page each time.
+func (r *SubscriberRepository) FindPageAfter(ctx context.Context, envID, afterID bson.ObjectID, limit int) ([]model.Subscriber, error) {
+	filter := bson.M{"environmentId": envID}
+	if !afterID.IsZero() {
+		filter["_id"] = bson.M{"$gt": afterID}
+	}
+
+	opts := options.Find().
+		SetSort(bson.D{{Key: "_id", Value: 1}}).
+		SetLimit(int64(limit))
+
+	cursor, err := r.col.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var subs []model.Subscriber
+	if err := cursor.All(ctx, &subs); err != nil {
+		return nil, err
+	}
+	return subs, nil
+}
+
 func (r *SubscriberRepository) Update(ctx context.Context, envID bson.ObjectID, subscriberID string, update bson.M) error {
 	update["updatedAt"] = time.Now()
-	_, err := r.col.UpdateOne(ctx,
+	res, err := r.col.UpdateOne(ctx,
 		bson.M{"environmentId": envID, "subscriberId": subscriberID},
 		bson.M{"$set": update},
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
 }
 
 func (r *SubscriberRepository) Delete(ctx context.Context, envID bson.ObjectID, subscriberID string) error {
@@ -287,8 +321,4 @@ func (r *SubscriberRepository) SetOnlineStatus(ctx context.Context, id bson.Obje
 	}
 	_, err := r.col.UpdateOne(ctx, bson.M{"_id": id}, bson.M{"$set": update})
 	return err
-}
-
-func (r *SubscriberRepository) Collection() *mongo.Collection {
-	return r.col
 }

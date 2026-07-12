@@ -20,7 +20,3 @@ type IntegrationMetaDTO struct {
 	SenderName  string `json:"senderName"`
 	SenderEmail string `json:"senderEmail"`
 }
-
-type SetPrimaryRequest struct {
-	IsPrimary bool `json:"isPrimary"`
-}

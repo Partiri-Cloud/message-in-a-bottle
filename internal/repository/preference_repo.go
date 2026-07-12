@@ -165,7 +165,3 @@ func (r *PreferenceRepository) FindBySubscriberAndWorkflow(ctx context.Context, 
 	}
 	return &pref, nil
 }
-
-func (r *PreferenceRepository) Collection() *mongo.Collection {
-	return r.col
-}

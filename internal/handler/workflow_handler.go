@@ -74,9 +74,8 @@ func (h *WorkflowHandler) List(c *gin.Context) {
 }
 
 func (h *WorkflowHandler) Get(c *gin.Context) {
-	id, err := bson.ObjectIDFromHex(c.Param("workflowId"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "VALIDATION_ERROR", "message": "invalid workflow ID"}})
+	id, ok := parseObjectIDParam(c, "workflowId", "workflow")
+	if !ok {
 		return
 	}
 
@@ -95,9 +94,8 @@ func (h *WorkflowHandler) Get(c *gin.Context) {
 }
 
 func (h *WorkflowHandler) Update(c *gin.Context) {
-	id, err := bson.ObjectIDFromHex(c.Param("workflowId"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "VALIDATION_ERROR", "message": "invalid workflow ID"}})
+	id, ok := parseObjectIDParam(c, "workflowId", "workflow")
+	if !ok {
 		return
 	}
 
@@ -108,6 +106,21 @@ func (h *WorkflowHandler) Update(c *gin.Context) {
 	}
 
 	envID := middleware.GetEnvironmentID(c)
+
+	// The repository replaces the whole document, so anything not owned by the
+	// request must be carried over from the stored workflow: createdAt, and
+	// isActive, which has its own endpoint (SetStatus) and must not be flipped
+	// back on by an edit.
+	existing, err := h.wfRepo.FindByID(c.Request.Context(), envID, id)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "workflow not found"}})
+			return
+		}
+		internalError(c, err)
+		return
+	}
+
 	wf := &model.Workflow{
 		ID:            id,
 		EnvironmentID: envID,
@@ -124,7 +137,8 @@ func (h *WorkflowHandler) Update(c *gin.Context) {
 			Slack:   req.PreferenceDefaults.Slack,
 			MSTeams: req.PreferenceDefaults.MSTeams,
 		},
-		IsActive: true,
+		IsActive:  existing.IsActive,
+		CreatedAt: existing.CreatedAt,
 	}
 
 	if err := h.wfRepo.Update(c.Request.Context(), envID, id, wf); err != nil {
@@ -140,9 +154,8 @@ func (h *WorkflowHandler) Update(c *gin.Context) {
 }
 
 func (h *WorkflowHandler) SetStatus(c *gin.Context) {
-	id, err := bson.ObjectIDFromHex(c.Param("workflowId"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "VALIDATION_ERROR", "message": "invalid workflow ID"}})
+	id, ok := parseObjectIDParam(c, "workflowId", "workflow")
+	if !ok {
 		return
 	}
 
@@ -166,9 +179,8 @@ func (h *WorkflowHandler) SetStatus(c *gin.Context) {
 }
 
 func (h *WorkflowHandler) Delete(c *gin.Context) {
-	id, err := bson.ObjectIDFromHex(c.Param("workflowId"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "VALIDATION_ERROR", "message": "invalid workflow ID"}})
+	id, ok := parseObjectIDParam(c, "workflowId", "workflow")
+	if !ok {
 		return
 	}
 
