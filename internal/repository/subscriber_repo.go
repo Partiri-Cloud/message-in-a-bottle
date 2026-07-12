@@ -77,7 +77,7 @@ func buildSubscriberUpdate(sub *model.Subscriber, now time.Time) (subscriberUpda
 		return subscriberUpdate{}, err
 	}
 
-	channels, _ := doc["channels"].(bson.M)
+	channels := doc["channels"]
 	delete(doc, "createdAt")
 	delete(doc, "_id")
 	delete(doc, "isOnline")
@@ -109,19 +109,33 @@ func buildSubscriberUpdate(sub *model.Subscriber, now time.Time) (subscriberUpda
 // dotted path: scalars into set, arrays into addToSet so they merge. Empty
 // values never reach here — omitempty on the model drops them — which is exactly
 // what makes an unsupplied field leave the stored one alone.
-func flattenChannels(prefix string, doc bson.M, set, addToSet bson.M) {
-	for key, value := range doc {
-		path := prefix + "." + key
-		switch v := value.(type) {
-		case bson.M:
-			flattenChannels(path, v, set, addToSet)
-		case bson.A:
-			if len(v) > 0 {
-				addToSet[path] = bson.M{"$each": v}
-			}
-		default:
-			set[path] = value
+//
+// Both bson.D and bson.M are accepted, and that is load-bearing: unmarshaling
+// into a bson.M makes only the *top level* a map, and every subdocument beneath
+// it — channels included — arrives as a bson.D.
+func flattenChannels(prefix string, doc any, set, addToSet bson.M) {
+	switch d := doc.(type) {
+	case bson.M:
+		for key, value := range d {
+			flattenChannelValue(prefix+"."+key, value, set, addToSet)
 		}
+	case bson.D:
+		for _, elem := range d {
+			flattenChannelValue(prefix+"."+elem.Key, elem.Value, set, addToSet)
+		}
+	}
+}
+
+func flattenChannelValue(path string, value any, set, addToSet bson.M) {
+	switch v := value.(type) {
+	case bson.M, bson.D:
+		flattenChannels(path, v, set, addToSet)
+	case bson.A:
+		if len(v) > 0 {
+			addToSet[path] = bson.M{"$each": v}
+		}
+	default:
+		set[path] = value
 	}
 }
 
