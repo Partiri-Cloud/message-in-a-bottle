@@ -54,10 +54,36 @@ type FeedFilter struct {
 	Archived bool
 }
 
+// deliveredInApp restricts a query to notifications whose in_app step actually
+// went out.
+//
+// A notification document is created for every recipient at trigger time, before
+// the worker evaluates preferences — so a workflow whose in_app step the
+// subscriber has turned off, or which has no in_app step at all, still leaves a
+// row behind. That row is never rendered (SetRenderedContent only runs on
+// delivery), so it carries no subject and no content: in a feed it shows up as a
+// blank entry with nothing but a timestamp, and it counts toward the unseen
+// badge. Deploying a service produced exactly that — one real notification from
+// deploy-succeeded, and one empty one from deploy-started, which the user had
+// switched off.
+//
+// The feed is the in-app inbox: it holds what was delivered in-app, nothing else.
+// Delivery status for the other channels stays on the document and remains
+// visible through the notifications/activity endpoints.
+func deliveredInApp() bson.M {
+	return bson.M{
+		"$elemMatch": bson.M{
+			"channel": "in_app",
+			"status":  bson.M{"$in": []string{"sent", "delivered"}},
+		},
+	}
+}
+
 func (r *NotificationRepository) FindFeed(ctx context.Context, envID, subscriberID bson.ObjectID, filter FeedFilter, page, limit int) ([]model.Notification, int64, error) {
 	q := bson.M{
 		"environmentId": envID,
 		"subscriberId":  subscriberID,
+		"channels":      deliveredInApp(),
 	}
 	if filter.Read != nil {
 		q["read"] = *filter.Read
@@ -180,12 +206,17 @@ func (r *NotificationRepository) BulkMarkSeen(ctx context.Context, envID, subID 
 	return err
 }
 
+// UnseenCount counts what the feed would show — the same delivered-in-app
+// predicate. Counting undelivered rows would put a badge on the bell for
+// notifications the user cannot open, and which cannot be cleared by reading
+// them, because they are not in the feed to begin with.
 func (r *NotificationRepository) UnseenCount(ctx context.Context, envID, subscriberID bson.ObjectID) (int64, error) {
 	return r.col.CountDocuments(ctx, bson.M{
 		"environmentId": envID,
 		"subscriberId":  subscriberID,
 		"seen":          false,
 		"archivedAt":    nil,
+		"channels":      deliveredInApp(),
 	})
 }
 
