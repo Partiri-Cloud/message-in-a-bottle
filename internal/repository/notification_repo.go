@@ -253,7 +253,3 @@ func (r *NotificationRepository) UpdateChannelStatus(ctx context.Context, notifI
 	)
 	return err
 }
-
-func (r *NotificationRepository) Collection() *mongo.Collection {
-	return r.col
-}

@@ -1,12 +1,13 @@
 module github.com/partiri-cloud/message-in-a-bottle
 
-go 1.25.0
+go 1.25.12
 
 require (
 	firebase.google.com/go/v4 v4.19.0
 	github.com/aws/aws-sdk-go-v2/config v1.32.14
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.14
 	github.com/aws/aws-sdk-go-v2/service/ses v1.34.22
+	github.com/coder/websocket v1.8.15
 	github.com/gin-gonic/gin v1.12.0
 	github.com/google/uuid v1.6.0
 	github.com/hibiken/asynq v0.26.0
@@ -17,7 +18,6 @@ require (
 	go.mongodb.org/mongo-driver/v2 v2.5.0
 	golang.org/x/text v0.37.0
 	google.golang.org/api v0.274.0
-	nhooyr.io/websocket v1.8.17
 )
 
 require (

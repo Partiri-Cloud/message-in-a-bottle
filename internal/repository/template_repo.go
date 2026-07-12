@@ -72,10 +72,12 @@ func (r *TemplateRepository) Update(ctx context.Context, envID bson.ObjectID, id
 }
 
 func (r *TemplateRepository) Delete(ctx context.Context, envID bson.ObjectID, identifier string) error {
-	_, err := r.col.DeleteOne(ctx, bson.M{"environmentId": envID, "identifier": identifier})
-	return err
-}
-
-func (r *TemplateRepository) Collection() *mongo.Collection {
-	return r.col
+	res, err := r.col.DeleteOne(ctx, bson.M{"environmentId": envID, "identifier": identifier})
+	if err != nil {
+		return err
+	}
+	if res.DeletedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
 }

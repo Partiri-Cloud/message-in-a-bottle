@@ -91,7 +91,9 @@ func AuthMiddleware(envRepo *repository.EnvironmentRepository) gin.HandlerFunc {
 		shouldUpdate := !ok || time.Since(last) > 5*time.Minute
 		if shouldUpdate {
 			lastUpdated[keyHash] = time.Now()
-			// Evict oldest entries if map grows too large
+			// Cap the map by evicting an arbitrary entry (map iteration order is
+			// random). Worst case a fresh entry goes, costing one extra
+			// lastUsedAt write later — cheaper than tracking recency.
 			if len(lastUpdated) > maxDebounceEntries {
 				for k := range lastUpdated {
 					delete(lastUpdated, k)

@@ -105,6 +105,11 @@ func (h *TriggerHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 
 		planned := engine.EvaluateWorkflow(wf, subscriber, payload.Payload, notif)
 
+		// A delay or digest step takes over the rest of the chain: its handler
+		// enqueues the steps after it once it fires, so planning must stop there.
+		// Enqueueing later steps here as well would deliver them immediately —
+		// bypassing the wait — and then a second time from the control handler.
+	stepLoop:
 		for _, ps := range planned {
 			if ps.Skipped {
 				h.activityRepo.Create(ctx, &model.ActivityLog{
@@ -121,13 +126,25 @@ func (h *TriggerHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 
 			switch ps.Step.Type {
 			case "delay":
+				// A delay step without config cannot wait; treat it as a no-op
+				// instead of stranding the steps after it.
+				if ps.Step.DelayConfig == nil {
+					log.Printf("delay step %d in workflow %s has no delayConfig, ignoring", ps.StepIndex, wf.Identifier)
+					continue
+				}
 				if err := h.enqueueDelay(ps, notif, subscriber, wf, payload); err != nil {
 					log.Printf("failed to enqueue delay: %v", err)
 				}
+				break stepLoop
 			case "digest":
+				if ps.Step.DigestConfig == nil {
+					log.Printf("digest step %d in workflow %s has no digestConfig, ignoring", ps.StepIndex, wf.Identifier)
+					continue
+				}
 				if err := h.enqueueDigest(ctx, ps, notif, subscriber, wf, payload); err != nil {
 					log.Printf("failed to enqueue digest: %v", err)
 				}
+				break stepLoop
 			default:
 				if err := h.enqueueDelivery(ps, notif, subscriber, payload); err != nil {
 					log.Printf("failed to enqueue delivery: %v", err)

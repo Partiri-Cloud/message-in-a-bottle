@@ -93,6 +93,10 @@ func (h *TopicHandler) Update(c *gin.Context) {
 	topicKey := c.Param("topicKey")
 
 	if err := h.topicRepo.UpdateName(c.Request.Context(), envID, topicKey, req.Name); err != nil {
+		if err == mongo.ErrNoDocuments {
+			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "topic not found"}})
+			return
+		}
 		internalError(c, err)
 		return
 	}

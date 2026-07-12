@@ -67,9 +67,8 @@ func (h *NotificationHandler) List(c *gin.Context) {
 }
 
 func (h *NotificationHandler) Get(c *gin.Context) {
-	id, err := bson.ObjectIDFromHex(c.Param("id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "VALIDATION_ERROR", "message": "invalid notification ID"}})
+	id, ok := parseObjectIDParam(c, "id", "notification")
+	if !ok {
 		return
 	}
 
@@ -94,11 +93,7 @@ func (h *NotificationHandler) Feed(c *gin.Context) {
 
 	sub, err := h.subRepo.FindBySubscriberID(c.Request.Context(), envID, subscriberID)
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "subscriber not found"}})
-			return
-		}
-		internalError(c, err)
+		respondSubscriberErr(c, err)
 		return
 	}
 
@@ -131,20 +126,15 @@ func (h *NotificationHandler) Feed(c *gin.Context) {
 }
 
 func (h *NotificationHandler) MarkSeen(c *gin.Context) {
-	notifID, err := bson.ObjectIDFromHex(c.Param("notifId"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "VALIDATION_ERROR", "message": "invalid notification ID"}})
+	notifID, ok := parseObjectIDParam(c, "notifId", "notification")
+	if !ok {
 		return
 	}
 
 	envID := middleware.GetEnvironmentID(c)
 	sub, err := h.subRepo.FindBySubscriberID(c.Request.Context(), envID, c.Param("subscriberId"))
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "subscriber not found"}})
-			return
-		}
-		internalError(c, err)
+		respondSubscriberErr(c, err)
 		return
 	}
 
@@ -161,20 +151,15 @@ func (h *NotificationHandler) MarkSeen(c *gin.Context) {
 }
 
 func (h *NotificationHandler) MarkRead(c *gin.Context) {
-	notifID, err := bson.ObjectIDFromHex(c.Param("notifId"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "VALIDATION_ERROR", "message": "invalid notification ID"}})
+	notifID, ok := parseObjectIDParam(c, "notifId", "notification")
+	if !ok {
 		return
 	}
 
 	envID := middleware.GetEnvironmentID(c)
 	sub, err := h.subRepo.FindBySubscriberID(c.Request.Context(), envID, c.Param("subscriberId"))
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "subscriber not found"}})
-			return
-		}
-		internalError(c, err)
+		respondSubscriberErr(c, err)
 		return
 	}
 
@@ -191,20 +176,15 @@ func (h *NotificationHandler) MarkRead(c *gin.Context) {
 }
 
 func (h *NotificationHandler) Archive(c *gin.Context) {
-	notifID, err := bson.ObjectIDFromHex(c.Param("notifId"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "VALIDATION_ERROR", "message": "invalid notification ID"}})
+	notifID, ok := parseObjectIDParam(c, "notifId", "notification")
+	if !ok {
 		return
 	}
 
 	envID := middleware.GetEnvironmentID(c)
 	sub, err := h.subRepo.FindBySubscriberID(c.Request.Context(), envID, c.Param("subscriberId"))
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "subscriber not found"}})
-			return
-		}
-		internalError(c, err)
+		respondSubscriberErr(c, err)
 		return
 	}
 
@@ -230,11 +210,7 @@ func (h *NotificationHandler) BulkAction(c *gin.Context) {
 	envID := middleware.GetEnvironmentID(c)
 	sub, err := h.subRepo.FindBySubscriberID(c.Request.Context(), envID, c.Param("subscriberId"))
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "subscriber not found"}})
-			return
-		}
-		internalError(c, err)
+		respondSubscriberErr(c, err)
 		return
 	}
 
@@ -288,11 +264,7 @@ func (h *NotificationHandler) UnseenCount(c *gin.Context) {
 
 	sub, err := h.subRepo.FindBySubscriberID(c.Request.Context(), envID, subscriberID)
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "subscriber not found"}})
-			return
-		}
-		internalError(c, err)
+		respondSubscriberErr(c, err)
 		return
 	}
 

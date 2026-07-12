@@ -12,6 +12,7 @@ import (
 	"github.com/partiri-cloud/message-in-a-bottle/internal/handler/dto"
 	"github.com/partiri-cloud/message-in-a-bottle/internal/model"
 	"github.com/partiri-cloud/message-in-a-bottle/internal/repository"
+	"github.com/partiri-cloud/message-in-a-bottle/internal/worker"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
@@ -20,29 +21,6 @@ var (
 	ErrDuplicateTransaction = errors.New("duplicate transactionId")
 	ErrWorkflowNotFound     = errors.New("workflow not found")
 )
-
-const (
-	TaskTypeTrigger   = "task:trigger"
-	TaskTypeBroadcast = "task:broadcast"
-)
-
-type TriggerPayload struct {
-	EnvironmentID string            `json:"environmentId"`
-	WorkflowID    string            `json:"workflowId"`
-	SubscriberIDs map[string]string `json:"subscriberIds"` // subscriberID hex → notificationID hex
-	Payload       map[string]any    `json:"payload"`
-	TransactionID string            `json:"transactionId"`
-	Overrides     map[string]any    `json:"overrides,omitempty"`
-}
-
-type BroadcastTaskPayload struct {
-	EnvironmentID      string         `json:"environmentId"`
-	WorkflowIdentifier string         `json:"workflowIdentifier"`
-	Payload            map[string]any `json:"payload"`
-	TransactionID      string         `json:"transactionId"`
-	Overrides          map[string]any `json:"overrides,omitempty"`
-	RetentionDays      int            `json:"retentionDays"`
-}
 
 type TriggerResult struct {
 	TransactionID   string   `json:"transactionId"`
@@ -106,24 +84,13 @@ func (s *TriggerService) Trigger(ctx context.Context, envID bson.ObjectID, req *
 	var notifIDs []string
 	notifIDMap := make(map[string]string, len(subscriberIDs))
 	for _, subID := range subscriberIDs {
-		channels := make([]model.ChannelDelivery, 0)
-		for _, step := range wf.Steps {
-			if step.Type == "delay" || step.Type == "digest" {
-				continue
-			}
-			channels = append(channels, model.ChannelDelivery{
-				Channel: step.Type,
-				Status:  "pending",
-			})
-		}
-
 		notif := &model.Notification{
 			EnvironmentID: envID,
 			SubscriberID:  subID,
 			WorkflowID:    wf.ID,
 			TransactionID: txID,
 			Payload:       req.Payload,
-			Channels:      channels,
+			Channels:      worker.BuildChannelDeliveries(wf.Steps),
 			ExpireAt:      time.Now().Add(time.Duration(s.retention) * 24 * time.Hour),
 		}
 
@@ -139,7 +106,7 @@ func (s *TriggerService) Trigger(ctx context.Context, envID bson.ObjectID, req *
 	}
 
 	// Enqueue trigger task
-	payload := TriggerPayload{
+	payload := worker.TriggerPayload{
 		EnvironmentID: envID.Hex(),
 		WorkflowID:    wf.ID.Hex(),
 		SubscriberIDs: notifIDMap,
@@ -152,7 +119,7 @@ func (s *TriggerService) Trigger(ctx context.Context, envID bson.ObjectID, req *
 	if err != nil {
 		return nil, fmt.Errorf("marshal trigger payload: %w", err)
 	}
-	task := asynq.NewTask(TaskTypeTrigger, data)
+	task := asynq.NewTask(worker.TaskTypeTrigger, data)
 	if _, err := s.asynq.Enqueue(task); err != nil {
 		return nil, err
 	}
@@ -169,7 +136,7 @@ func (s *TriggerService) Broadcast(ctx context.Context, envID bson.ObjectID, req
 		txID = uuid.New().String()
 	}
 
-	bp := BroadcastTaskPayload{
+	bp := worker.BroadcastTaskPayload{
 		EnvironmentID:      envID.Hex(),
 		WorkflowIdentifier: req.WorkflowIdentifier,
 		Payload:            req.Payload,
@@ -181,7 +148,7 @@ func (s *TriggerService) Broadcast(ctx context.Context, envID bson.ObjectID, req
 	if err != nil {
 		return nil, fmt.Errorf("marshal broadcast payload: %w", err)
 	}
-	task := asynq.NewTask(TaskTypeBroadcast, data)
+	task := asynq.NewTask(worker.TaskTypeBroadcast, data)
 	if _, err := s.asynq.Enqueue(task); err != nil {
 		return nil, err
 	}

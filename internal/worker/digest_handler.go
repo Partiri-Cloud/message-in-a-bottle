@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 
 	"github.com/hibiken/asynq"
 	"github.com/redis/go-redis/v9"
@@ -67,42 +66,15 @@ func (h *DigestHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 		return fmt.Errorf("find workflow: %w", err)
 	}
 
-	// Collect digested notification object IDs
-	var digestedOIDs []bson.ObjectID
-	for _, idStr := range notifIDs {
-		oid, err := bson.ObjectIDFromHex(idStr)
-		if err == nil {
-			digestedOIDs = append(digestedOIDs, oid)
-		}
-	}
-
-	// Enqueue delivery for steps after the digest step
-	for i := payload.StepIndex + 1; i < len(wf.Steps); i++ {
-		step := wf.Steps[i]
-		if step.Type == "delay" || step.Type == "digest" {
-			break
-		}
-
-		// Use first notification as the representative
-		dp := DeliveryPayload{
-			EnvironmentID:  payload.EnvironmentID,
-			NotificationID: notifIDs[0],
-			SubscriberID:   payload.SubscriberID,
-			Channel:        step.Type,
-			StepIndex:      i,
-			Payload:        map[string]any{"digestCount": len(notifIDs), "digestedIds": notifIDs},
-			Attempt:        0,
-		}
-		data, merr := json.Marshal(dp)
-		if merr != nil {
-			log.Printf("failed to marshal post-digest delivery step %d: %v", i, merr)
-			continue
-		}
-		task := asynq.NewTask(TaskTypeDelivery, data)
-		if _, err := h.asynq.Enqueue(task); err != nil {
-			log.Printf("failed to enqueue post-digest delivery step %d: %v", i, err)
-		}
-	}
+	// Enqueue delivery for steps after the digest step, with the first
+	// notification as the representative.
+	enqueueFollowingDeliveries(h.asynq, wf, payload.StepIndex, "post-digest", DeliveryPayload{
+		EnvironmentID:  payload.EnvironmentID,
+		NotificationID: notifIDs[0],
+		SubscriberID:   payload.SubscriberID,
+		Payload:        map[string]any{"digestCount": len(notifIDs), "digestedIds": notifIDs},
+		Attempt:        0,
+	})
 
 	return nil
 }

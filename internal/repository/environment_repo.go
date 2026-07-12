@@ -30,15 +30,6 @@ func (r *EnvironmentRepository) Create(ctx context.Context, env *model.Environme
 	return nil
 }
 
-func (r *EnvironmentRepository) FindByID(ctx context.Context, id bson.ObjectID) (*model.Environment, error) {
-	var env model.Environment
-	err := r.col.FindOne(ctx, bson.M{"_id": id}).Decode(&env)
-	if err != nil {
-		return nil, err
-	}
-	return &env, nil
-}
-
 func (r *EnvironmentRepository) FindByIdentifier(ctx context.Context, identifier string) (*model.Environment, error) {
 	var env model.Environment
 	err := r.col.FindOne(ctx, bson.M{"identifier": identifier}).Decode(&env)
@@ -93,8 +84,4 @@ func (r *EnvironmentRepository) FindAll(ctx context.Context) ([]model.Environmen
 		return nil, err
 	}
 	return envs, nil
-}
-
-func (r *EnvironmentRepository) Collection() *mongo.Collection {
-	return r.col
 }

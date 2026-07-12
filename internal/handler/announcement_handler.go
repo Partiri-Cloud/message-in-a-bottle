@@ -48,13 +48,13 @@ func (h *AnnouncementHandler) Create(c *gin.Context) {
 
 	data, err := json.Marshal(a)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
 	ttl := time.Until(req.ExpiresAt)
-	if err := h.rdb.Set(context.Background(), announcementKeyPrefix+a.ID, data, ttl).Err(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+	if err := h.rdb.Set(c.Request.Context(), announcementKeyPrefix+a.ID, data, ttl).Err(); err != nil {
+		internalError(c, err)
 		return
 	}
 
@@ -64,7 +64,7 @@ func (h *AnnouncementHandler) Create(c *gin.Context) {
 func (h *AnnouncementHandler) List(c *gin.Context) {
 	announcements, err := h.scanAll(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
@@ -78,7 +78,7 @@ func (h *AnnouncementHandler) List(c *gin.Context) {
 func (h *AnnouncementHandler) Active(c *gin.Context) {
 	all, err := h.scanAll(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
@@ -112,13 +112,13 @@ func (h *AnnouncementHandler) Update(c *gin.Context) {
 		return
 	}
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
 	var a dto.Announcement
 	if err := json.Unmarshal(raw, &a); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
@@ -152,13 +152,13 @@ func (h *AnnouncementHandler) Update(c *gin.Context) {
 
 	data, err := json.Marshal(a)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
 	ttl := time.Until(a.ExpiresAt)
 	if err := h.rdb.Set(c.Request.Context(), key, data, ttl).Err(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 
@@ -171,7 +171,7 @@ func (h *AnnouncementHandler) Delete(c *gin.Context) {
 
 	n, err := h.rdb.Del(c.Request.Context(), key).Result()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"}})
+		internalError(c, err)
 		return
 	}
 	if n == 0 {

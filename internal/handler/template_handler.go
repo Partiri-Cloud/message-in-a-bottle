@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -140,6 +141,10 @@ func (h *TemplateHandler) Delete(c *gin.Context) {
 	identifier := c.Param("identifier")
 
 	if err := h.tmplRepo.Delete(c.Request.Context(), envID, identifier); err != nil {
+		if err == mongo.ErrNoDocuments {
+			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "template not found"}})
+			return
+		}
 		internalError(c, err)
 		return
 	}
@@ -158,7 +163,20 @@ func (h *TemplateHandler) Send(c *gin.Context) {
 	identifier := c.Param("identifier")
 
 	if err := h.tmplSvc.Send(c.Request.Context(), envID, identifier, req.To.SubscriberID, req.Payload, req.Locale); err != nil {
-		internalErrorMsg(c, err, err.Error())
+		switch {
+		case errors.Is(err, service.ErrTemplateNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "template not found"}})
+		case errors.Is(err, service.ErrSubscriberNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "subscriber not found"}})
+		case errors.Is(err, service.ErrTemplateInactive):
+			c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "CONFLICT", "message": "template is inactive"}})
+		case errors.Is(err, service.ErrTemplateRender):
+			// The tenant's own template failed to render; the detail is theirs
+			// to see and act on.
+			c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "VALIDATION_ERROR", "message": err.Error()}})
+		default:
+			internalError(c, err)
+		}
 		return
 	}
 

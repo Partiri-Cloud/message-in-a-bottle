@@ -84,13 +84,3 @@ func (h *Hub) SubscribeRedis(ctx context.Context) {
 		}
 	}()
 }
-
-func (h *Hub) ConnectionCount() int {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	total := 0
-	for _, clients := range h.clients {
-		total += len(clients)
-	}
-	return total
-}

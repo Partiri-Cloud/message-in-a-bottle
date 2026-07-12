@@ -81,7 +81,7 @@ func (h *PreferenceHandler) GetAll(c *gin.Context) {
 
 	sub, err := h.subRepo.FindBySubscriberID(c.Request.Context(), envID, c.Param("subscriberId"))
 	if err != nil {
-		h.respondSubscriberErr(c, err)
+		respondSubscriberErr(c, err)
 		return
 	}
 
@@ -129,7 +129,7 @@ func (h *PreferenceHandler) UpdateGlobal(c *gin.Context) {
 	envID := middleware.GetEnvironmentID(c)
 	sub, err := h.subRepo.FindBySubscriberID(c.Request.Context(), envID, c.Param("subscriberId"))
 	if err != nil {
-		h.respondSubscriberErr(c, err)
+		respondSubscriberErr(c, err)
 		return
 	}
 
@@ -180,7 +180,7 @@ func (h *PreferenceHandler) UpdateWorkflow(c *gin.Context) {
 
 	sub, err := h.subRepo.FindBySubscriberID(c.Request.Context(), envID, c.Param("subscriberId"))
 	if err != nil {
-		h.respondSubscriberErr(c, err)
+		respondSubscriberErr(c, err)
 		return
 	}
 
@@ -249,14 +249,6 @@ func (h *PreferenceHandler) lookupWorkflow(ctx context.Context, envID bson.Objec
 		return nil, mongo.ErrNoDocuments
 	}
 	return h.wfRepo.FindByID(ctx, envID, id)
-}
-
-func (h *PreferenceHandler) respondSubscriberErr(c *gin.Context, err error) {
-	if errors.Is(err, mongo.ErrNoDocuments) {
-		c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "subscriber not found"}})
-		return
-	}
-	internalError(c, err)
 }
 
 // channelOverrides reduces a partial channel payload to the channels the caller

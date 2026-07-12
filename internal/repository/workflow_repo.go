@@ -132,7 +132,3 @@ func (r *WorkflowRepository) Delete(ctx context.Context, envID, id bson.ObjectID
 	}
 	return nil
 }
-
-func (r *WorkflowRepository) Collection() *mongo.Collection {
-	return r.col
-}

@@ -10,7 +10,6 @@ import (
 	"github.com/partiri-cloud/message-in-a-bottle/internal/middleware"
 	"github.com/partiri-cloud/message-in-a-bottle/internal/model"
 	"github.com/partiri-cloud/message-in-a-bottle/internal/repository"
-	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
@@ -115,9 +114,8 @@ func (h *IntegrationHandler) AvailableChannels(c *gin.Context) {
 }
 
 func (h *IntegrationHandler) Get(c *gin.Context) {
-	id, err := bson.ObjectIDFromHex(c.Param("id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "VALIDATION_ERROR", "message": "invalid integration ID"}})
+	id, ok := parseObjectIDParam(c, "id", "integration")
+	if !ok {
 		return
 	}
 
@@ -138,9 +136,8 @@ func (h *IntegrationHandler) Get(c *gin.Context) {
 }
 
 func (h *IntegrationHandler) Update(c *gin.Context) {
-	id, err := bson.ObjectIDFromHex(c.Param("id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "VALIDATION_ERROR", "message": "invalid integration ID"}})
+	id, ok := parseObjectIDParam(c, "id", "integration")
+	if !ok {
 		return
 	}
 
@@ -198,9 +195,8 @@ func (h *IntegrationHandler) Update(c *gin.Context) {
 }
 
 func (h *IntegrationHandler) Delete(c *gin.Context) {
-	id, err := bson.ObjectIDFromHex(c.Param("id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "VALIDATION_ERROR", "message": "invalid integration ID"}})
+	id, ok := parseObjectIDParam(c, "id", "integration")
+	if !ok {
 		return
 	}
 
@@ -215,9 +211,8 @@ func (h *IntegrationHandler) Delete(c *gin.Context) {
 }
 
 func (h *IntegrationHandler) SetPrimary(c *gin.Context) {
-	id, err := bson.ObjectIDFromHex(c.Param("id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "VALIDATION_ERROR", "message": "invalid integration ID"}})
+	id, ok := parseObjectIDParam(c, "id", "integration")
+	if !ok {
 		return
 	}
 

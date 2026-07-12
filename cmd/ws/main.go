@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/coder/websocket"
 	"github.com/partiri-cloud/message-in-a-bottle/internal/config"
 	"github.com/partiri-cloud/message-in-a-bottle/internal/logging"
 	"github.com/partiri-cloud/message-in-a-bottle/internal/middleware"
@@ -20,7 +21,6 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
-	"nhooyr.io/websocket"
 )
 
 type wsAuthMessage struct {
