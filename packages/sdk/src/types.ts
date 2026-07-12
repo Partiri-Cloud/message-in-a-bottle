@@ -29,6 +29,10 @@ export interface Notification {
   workflowId: string;
   /** Client-provided transaction ID for idempotency. */
   transactionId: string;
+  /** Rendered subject of the in-app step. Absent until the in_app channel is delivered. */
+  subject?: string;
+  /** Rendered body of the in-app step. Absent until the in_app channel is delivered. */
+  content?: string;
   /** Arbitrary payload data attached to the notification. */
   payload: Record<string, unknown>;
   /** Delivery status per channel. */

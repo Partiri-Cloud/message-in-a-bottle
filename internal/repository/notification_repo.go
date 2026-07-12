@@ -189,6 +189,25 @@ func (r *NotificationRepository) UnseenCount(ctx context.Context, envID, subscri
 	})
 }
 
+// SetRenderedContent persists the in-app step's rendered subject and body on the
+// notification itself, so the feed can return them to clients that were not
+// connected when the WebSocket push went out.
+//
+// Scoped by environmentId like every other query in this repository: the caller
+// happens to hold an id read off the notification document, but tenant isolation
+// is an invariant of the collection, not of one call site.
+func (r *NotificationRepository) SetRenderedContent(ctx context.Context, envID, notifID bson.ObjectID, subject, content string) error {
+	_, err := r.col.UpdateOne(ctx,
+		bson.M{"_id": notifID, "environmentId": envID},
+		bson.M{"$set": bson.M{
+			"subject":   subject,
+			"content":   content,
+			"updatedAt": time.Now(),
+		}},
+	)
+	return err
+}
+
 func (r *NotificationRepository) UpdateChannelStatus(ctx context.Context, notifID bson.ObjectID, channel, status string, update bson.M) error {
 	setFields := bson.M{
 		"channels.$.status": status,

@@ -464,19 +464,38 @@ func (h *DeliveryHandler) deliverInApp(ctx context.Context, envID, notifID, subI
 		Payload: payload.Payload,
 	}
 
+	// On a render error the rendered text is left empty rather than falling back
+	// to the raw template source. This value is persisted and shown in the feed:
+	// an empty body degrades to the client's "untitled" placeholder, whereas the
+	// raw source would permanently display "…service {{.Payload.serviceName}}".
 	var content string
 	if step.Template != nil && step.Template.Content != nil {
 		tmplStr := engine.ResolveLocale(step.Template.Content, sub.Locale, "en")
 		rendered, err := engine.RenderTemplate(tmplStr, data)
 		if err != nil {
-			log.Printf("template render error: %v", err)
-			content = tmplStr
+			log.Printf("in_app content render error for %s: %v", notifID.Hex(), err)
 		} else {
 			content = rendered
 		}
 	}
 
+	var subject string
+	if step.Template != nil && step.Template.Subject != nil {
+		tmplStr := engine.ResolveLocale(step.Template.Subject, sub.Locale, "en")
+		rendered, err := engine.RenderTemplate(tmplStr, data)
+		if err != nil {
+			log.Printf("in_app subject render error for %s: %v", notifID.Hex(), err)
+		} else {
+			subject = rendered
+		}
+	}
+
 	now := time.Now()
+	// Persist before the push: a client that reloads right after receiving the
+	// WebSocket event must find the same text in the feed.
+	if err := h.notifRepo.SetRenderedContent(ctx, envID, notifID, subject, content); err != nil {
+		log.Printf("failed to persist rendered in_app content for %s: %v", notifID.Hex(), err)
+	}
 	h.notifRepo.UpdateChannelStatus(ctx, notifID, "in_app", "sent", bson.M{"sentAt": now})
 
 	wsMsg, _ := json.Marshal(map[string]any{
@@ -484,6 +503,7 @@ func (h *DeliveryHandler) deliverInApp(ctx context.Context, envID, notifID, subI
 		"event": "notification:new",
 		"data": map[string]any{
 			"id":        notifID.Hex(),
+			"subject":   subject,
 			"content":   content,
 			"payload":   payload.Payload,
 			"createdAt": notif.CreatedAt,
