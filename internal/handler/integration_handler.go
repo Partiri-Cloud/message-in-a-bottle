@@ -89,6 +89,31 @@ func (h *IntegrationHandler) List(c *gin.Context) {
 	})
 }
 
+// AvailableChannels reports which channels this environment can deliver on.
+//
+// It exists so a preferences UI can render only the channels that work. Without
+// it a client has no way to tell: listing integrations needs `integrations:read`
+// — a permission a browser-facing key must not hold, since integrations carry
+// provider credentials — and a channel with no integration is not rejected at
+// trigger time. It is accepted, then silently marked "failed — no integration
+// configured" by the worker. The subscriber sees a toggle they can switch on
+// that never delivers anything.
+//
+// Scoped to `preferences:read`: it returns no credentials and nothing about the
+// integrations themselves, only a boolean per channel, and any client rendering
+// preferences already holds that permission.
+func (h *IntegrationHandler) AvailableChannels(c *gin.Context) {
+	envID := middleware.GetEnvironmentID(c)
+
+	avail, err := h.intgRepo.AvailableChannels(c.Request.Context(), envID)
+	if err != nil {
+		internalError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": avail})
+}
+
 func (h *IntegrationHandler) Get(c *gin.Context) {
 	id, err := bson.ObjectIDFromHex(c.Param("id"))
 	if err != nil {

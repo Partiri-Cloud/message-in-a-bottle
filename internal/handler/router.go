@@ -101,6 +101,11 @@ func RegisterRoutes(router *gin.Engine, h *Handlers, envRepo *repository.Environ
 		intg.PATCH("/:id/primary", middleware.RequirePermission("integrations:write"), h.Integration.SetPrimary)
 	}
 
+	// Which channels this environment can actually deliver on. Deliberately not
+	// under /integrations: it exposes no integration data, and a browser-facing
+	// key must never hold integrations:read (credentials live there).
+	api.GET("/channels", middleware.RequirePermission("preferences:read"), h.Integration.AvailableChannels)
+
 	// Templates
 	tmpl := api.Group("/templates")
 	{

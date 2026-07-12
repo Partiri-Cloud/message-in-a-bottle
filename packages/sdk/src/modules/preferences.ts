@@ -1,5 +1,9 @@
 import { HttpClient } from '../http';
-import type { Preference, PreferenceUpdate } from '../types';
+import type {
+  Preference,
+  PreferenceUpdate,
+  ResolvedChannels,
+} from '../types';
 
 /**
  * Module for managing subscriber notification preferences.
@@ -52,6 +56,26 @@ export class PreferencesModule {
   async list(): Promise<Preference[]> {
     const resp = await this.http.get<{ data: Preference[] }>(
       `/api/v1/subscribers/${this.subscriberId}/preferences`,
+    );
+    return resp.data;
+  }
+
+  /**
+   * Reports which channels this environment can actually deliver on.
+   *
+   * Render only these. A channel with no configured integration is not rejected
+   * when the subscriber enables it, nor when a notification is triggered for it:
+   * the worker marks that channel `failed — no integration configured` and moves
+   * on. So a toggle for an unconfigured channel looks like it works, is saved
+   * like it works, and delivers nothing — forever, and silently.
+   *
+   * `inApp` is always true: it needs no integration.
+   *
+   * @returns One boolean per channel.
+   */
+  async availableChannels(): Promise<ResolvedChannels> {
+    const resp = await this.http.get<{ data: ResolvedChannels }>(
+      '/api/v1/channels',
     );
     return resp.data;
   }
