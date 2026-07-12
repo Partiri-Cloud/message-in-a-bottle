@@ -22,7 +22,23 @@ func MongoURI() string {
 	return "mongodb://localhost:27017"
 }
 
-// SetupTestDB creates a test database with a unique name. Skips the test if MongoDB is not available.
+// unavailable reports that MongoDB could not be reached.
+//
+// A bare `go test ./...` on a laptop with no database up skips, as a
+// convenience. Anywhere a database was actually provisioned for us — CI sets CI,
+// scripts/test.sh sets MONGO_TEST_REQUIRED — it fails instead: a skip there is
+// not a convenience but a silent hole, and a green run over 49 never-executed
+// persistence tests is worse than a red one.
+func unavailable(t *testing.T, format string, args ...any) {
+	t.Helper()
+	if os.Getenv("CI") != "" || os.Getenv("MONGO_TEST_REQUIRED") != "" {
+		t.Fatalf(format, args...)
+	}
+	t.Skipf(format, args...)
+}
+
+// SetupTestDB creates a test database with a unique name. Skips the test if
+// MongoDB is not available, unless running on CI, where it fails instead.
 func SetupTestDB(t *testing.T) (*mongo.Database, func()) {
 	t.Helper()
 	ctx := context.Background()
@@ -33,12 +49,12 @@ func SetupTestDB(t *testing.T) (*mongo.Database, func()) {
 	opts := options.Client().ApplyURI(MongoURI()).SetConnectTimeout(3 * time.Second).SetServerSelectionTimeout(3 * time.Second)
 	client, err := mongo.Connect(opts)
 	if err != nil {
-		t.Skipf("skipping integration test: cannot connect to MongoDB: %v", err)
+		unavailable(t, "cannot connect to MongoDB at %s: %v", MongoURI(), err)
 	}
 
 	if err := client.Ping(connCtx, nil); err != nil {
 		client.Disconnect(context.Background())
-		t.Skipf("skipping integration test: MongoDB not available: %v", err)
+		unavailable(t, "MongoDB not available at %s: %v", MongoURI(), err)
 	}
 
 	dbName := fmt.Sprintf("mib_test_%d", time.Now().UnixNano())

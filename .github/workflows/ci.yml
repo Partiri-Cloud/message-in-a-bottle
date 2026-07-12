@@ -8,6 +8,16 @@ jobs:
   ci:
     name: Go — Format, Vet, Test & Build
     runs-on: ubuntu-latest
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ping:1})'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v5
@@ -17,6 +27,8 @@ jobs:
         run: test -z "$(gofmt -l .)"
       - run: go vet ./...
       - run: go test ./...
+        env:
+          MONGO_TEST_URI: mongodb://localhost:27017
       - run: |
           CGO_ENABLED=0 go build -o bin/api ./cmd/api
           CGO_ENABLED=0 go build -o bin/ws ./cmd/ws

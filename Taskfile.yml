@@ -63,9 +63,9 @@ tasks:
   # ─── Test ───────────────────────────────────────────────
 
   test:
-    desc: Run Go tests
+    desc: Run Go tests against a real MongoDB (starts one if none is up)
     cmds:
-      - go test ./...
+      - ./scripts/test.sh {{.CLI_ARGS}}
 
   test:sdk:
     desc: Run SDK tests
