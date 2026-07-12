@@ -1,6 +1,6 @@
 {
   "name": "@partiri-cloud/message-in-a-bottle-sdk",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Framework-agnostic notification SDK for message-in-a-bottle",
   "license": "MIT",
   "repository": {
