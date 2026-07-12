@@ -39,6 +39,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Digest key collision**: Digest Redis keys did not include the step index, so two digest steps in the same workflow sharing the same `digestKey` string would merge into a single digest window. Step index is now part of the key.
 - **Silent errors in worker**: Several `json.Marshal` and `bson.ObjectIDFromHex` calls silently ignored errors (`_, _`), leading to zero-value ObjectIDs or empty task payloads being enqueued. All are now propagated as errors.
 - **`json.Marshal` error on credentials update**: `PUT /integrations/:id` silently ignored a potential marshal error on the credentials field; now returns `400 VALIDATION_ERROR`.
+- **Channel config was never stored at all**: the three channel-merge fixes above describe the intended behaviour, but none of it ran. `buildSubscriberUpdate` asserted the marshalled `channels` subdocument to `bson.M`, and unmarshalling into a `bson.M` makes only the *top level* a map — every nested document below arrives as a `bson.D`. The assertion never held, its failure was discarded into a blank identifier, and so no `channels.*` path ever reached the update. Every `POST /subscribers` and `POST /subscribers/bulk` answered `200` while silently discarding the subscriber's push tokens and Slack/Teams webhooks. The walk now handles `bson.D` as well as `bson.M`.
+  No migration is needed: the next upsert writes the channel config correctly, and clients re-send their push tokens on every launch. A Slack or Teams webhook entered once by hand and never re-sent is the only thing that needs re-entering.
+
+- **In-app notifications had no text in the feed**: the `in_app` step rendered its template straight into the WebSocket push and never persisted it, so the stored notification held only an id, a payload and a timestamp. A subscriber connected at delivery time saw the message; anyone loading history afterwards got a blank row. The rendered `subject` and `content` are now written to the notification before the push goes out, and returned by the feed. A render error leaves the field empty rather than storing the raw template source, which would otherwise be displayed verbatim, placeholders and all.
 
 ### Added
 
@@ -46,6 +50,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `POST /api/v1/subscribers/:subscriberId/channels/push/tokens/remove` — unregister device tokens (`{"fcmTokens": [...], "apnsTokens": [...]}`). Subscriber upserts merge push tokens so one device cannot evict another's, which means they can only add; this is the removal half. Removing a token the subscriber does not have is a no-op, so the call is safe to retry.
 - `GET /api/v1/integrations/:id` — fetch a single integration by ID (was missing while `PUT`, `DELETE`, and `PATCH` all existed).
 - `broadcast_handler.go` — new async worker task handler for paginated broadcast fan-out.
+- `subject` and `content` on the notification model and on the SDK's `Notification` type — the rendered in-app text, absent until the `in_app` channel is delivered.
+- `scripts/test.sh` (`task test`) — runs the Go suite against a real MongoDB, reusing one on port `27017` if present and otherwise starting a throwaway `mongo:7` container and removing it afterwards. Accepts `go test` arguments: `task test -- ./internal/repository/ -run TestSubscriberRepo`.
 
 ### Changed
 
@@ -59,6 +65,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `BroadcastTaskPayload` added to both `service` and `worker` packages for the new async broadcast flow.
 - Condition evaluator `eq` / `ne` operators now use typed comparison: `nil` vs non-nil is always false, booleans are compared as booleans (not strings), and numbers are compared numerically. Only unrecognised types fall back to `fmt.Sprintf`.
 - SDK is published to GitHub Packages under the renamed `@partiri-cloud` scope. The publish workflow authenticates with `GITHUB_TOKEN` (`packages: write`) instead of `NPM_TOKEN`, and scopes the registry to `@partiri-cloud` so public dependencies still resolve from npmjs. Consumers need an `.npmrc` mapping the scope to `https://npm.pkg.github.com` with a `read:packages` token — see the SDK README.
+- The test suite runs against a real MongoDB, in CI via a `mongo:7` service container. It previously did not: CI ran a bare `go test ./...` with no database, and the integration tests *skip* when they cannot reach one — so 49 of 254 tests, every repository test among them, never executed while the job exited `0`. That green check is what hid the channel-config bug above. `testutil.SetupTestDB` now fails instead of skipping wherever a database was actually provisioned for it (CI sets `CI`, `scripts/test.sh` sets `MONGO_TEST_REQUIRED`), so the hole cannot silently reopen. A bare `go test` with nothing running still skips, so local iteration is unchanged.
+- `WS_ALLOWED_ORIGINS` and `CORS_ALLOWED_ORIGINS` take different formats, and `.env.example` now says so: the WebSocket list is matched against the `Origin` header's **host only** (`app.example.com`), while the CORS list is compared against the **full origin** including scheme (`https://app.example.com`). A scheme-qualified value in `WS_ALLOWED_ORIGINS` matches nothing and rejects every browser with a `403`.
 
 ## [0.1.0] - 2026-04-24
 

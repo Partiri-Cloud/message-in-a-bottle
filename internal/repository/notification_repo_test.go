@@ -464,3 +464,55 @@ func TestNotificationRepo_MarkRead_Idempotent_SecondCallReturnsNil(t *testing.T)
 	found, _ := repo.FindByID(context.Background(), envID, notif.ID)
 	assert.True(t, found.Read)
 }
+
+// A notification whose in_app step was delivered must come back from the feed
+// carrying its rendered text. The worker used to render the subject and body,
+// publish them over the WebSocket and never persist them, so any client that
+// loaded its history — rather than being connected at the moment of delivery —
+// got an id and a timestamp with nothing to display.
+func TestNotificationRepo_SetRenderedContent_IsReturnedByFeed(t *testing.T) {
+	db, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	envID, _ := testutil.SeedEnvironmentDoc(t, db, "test-env")
+	subID := testutil.SeedSubscriberDoc(t, db, envID, "usr_rendered")
+	repo := NewNotificationRepository(db)
+
+	notif := &model.Notification{
+		EnvironmentID: envID,
+		SubscriberID:  subID,
+		WorkflowID:    bson.NewObjectID(),
+		TransactionID: "tx_rendered",
+		Payload:       map[string]any{"serviceName": "miab-api"},
+		Channels:      []model.ChannelDelivery{{Channel: "in_app", Status: "pending"}},
+		ExpireAt:      time.Now().Add(90 * 24 * time.Hour),
+	}
+	require.NoError(t, repo.Create(context.Background(), notif))
+
+	require.NoError(t, repo.SetRenderedContent(
+		context.Background(),
+		envID,
+		notif.ID,
+		"Deployment succeeded",
+		"Service miab-api deployed successfully.",
+	))
+
+	// Tenant isolation: the write is scoped by environmentId, so the same
+	// notification id addressed from another environment must not touch it.
+	otherEnvID, _ := testutil.SeedEnvironmentDoc(t, db, "other-env")
+	require.NoError(t, repo.SetRenderedContent(
+		context.Background(),
+		otherEnvID,
+		notif.ID,
+		"hijacked subject",
+		"hijacked content",
+	))
+
+	feed, total, err := repo.FindFeed(context.Background(), envID, subID, FeedFilter{}, 1, 10)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), total)
+	require.Len(t, feed, 1)
+
+	assert.Equal(t, "Deployment succeeded", feed[0].Subject)
+	assert.Equal(t, "Service miab-api deployed successfully.", feed[0].Content)
+}
