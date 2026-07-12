@@ -272,18 +272,25 @@ Using Taskfile:
 task deps         # download Go modules + install SDK npm packages
 task build        # build all Go binaries (parallel)
 task build:all    # build Go binaries + SDK
+task test         # run Go tests (starts MongoDB if you don't have one)
 task test:all     # run Go + SDK tests
 task docker       # build Docker image
 ```
 
 Or manually:
 
-| Component | Install          | Test                  | Build                  |
-|-----------|------------------|-----------------------|------------------------|
-| Go (all)  | `go mod download` | `go test ./...`       | `go build ./cmd/...`   |
-| SDK       | `npm install`    | `npx vitest run`      | `npx tsup`             |
+| Component | Install           | Test               | Build                |
+|-----------|-------------------|--------------------|----------------------|
+| Go (all)  | `go mod download` | `./scripts/test.sh`| `go build ./cmd/...` |
+| SDK       | `npm install`     | `npx vitest run`   | `npx tsup`           |
 
 Run `task` with no arguments to see all available commands.
+
+### Tests and MongoDB
+
+Part of the Go suite is integration tests that need a real MongoDB. [`scripts/test.sh`](scripts/test.sh) makes sure one is there: it reuses whatever is already listening on `27017`, and otherwise starts a throwaway `mongo:7` container and removes it afterwards. Set `MONGO_TEST_URI` to point at your own instead.
+
+Use it rather than a bare `go test ./...`, which **skips** the database tests instead of failing them and still exits 0 — a green run that never touched the persistence layer. The script exports `MONGO_TEST_REQUIRED=1` so a missing database is a hard failure. CI does the same via a MongoDB service container.
 
 ## Docker image
 

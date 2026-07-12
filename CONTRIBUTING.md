@@ -57,10 +57,25 @@ docker compose up
 ## Running Tests
 
 ```bash
+task test        # Go tests (starts MongoDB if you don't have one)
 task test:all    # Go tests + SDK tests
-# or separately:
-go test ./...
-cd packages/sdk && npx vitest run
+task test:sdk    # SDK tests only
+```
+
+`task test` runs [`scripts/test.sh`](scripts/test.sh), which passes any extra arguments through to `go test`:
+
+```bash
+task test -- ./internal/repository/ -run TestSubscriberRepo
+```
+
+**About MongoDB.** Roughly a fifth of the Go suite is integration tests that need a real database. The script guarantees one: it reuses whatever is listening on port `27017` (a `task dev` stack, say), and otherwise starts a throwaway `mongo:7` container and removes it when the run ends.
+
+Prefer it over a bare `go test ./...`. Without a database those tests **skip rather than fail**, and `go test` still exits 0 — so the suite looks green while the entire persistence layer went untested. The script sets `MONGO_TEST_REQUIRED=1`, which turns that skip into a failure.
+
+To point the tests at your own database, set `MONGO_TEST_URI` and it is used as-is:
+
+```bash
+MONGO_TEST_URI=mongodb://localhost:27017 task test
 ```
 
 ## Building
@@ -75,7 +90,7 @@ task docker      # Docker image
 
 1. Fork the repository and create a branch from `master`.
 2. Make your changes. Add tests for new behaviour.
-3. Run `go test ./...` and ensure all tests pass.
+3. Run `task test` and ensure all tests pass. (Not a bare `go test ./...` — it skips every test that needs MongoDB and still exits 0.)
 4. Open a pull request against `dev`. Fill in the PR template.
 
 ## Reporting Issues
