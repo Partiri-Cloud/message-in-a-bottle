@@ -26,6 +26,9 @@ dist/
 .env.*
 !.env.example
 
+# Partiri deploy configs (per-deployment, may reference secrets)
+*.partiri.jsonc
+
 # IDE / Editor
 .idea/
 .vscode/
