@@ -64,4 +64,5 @@ func (f *ProviderFactory) registerDefaults() {
 	f.Register("apns", NewAPNSProvider)
 	f.Register("slack_webhook", NewSlackProvider)
 	f.Register("ms_teams_webhook", NewMSTeamsProvider)
+	f.Register("telegram_bot", NewTelegramProvider)
 }

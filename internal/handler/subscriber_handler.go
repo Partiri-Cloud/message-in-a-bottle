@@ -65,6 +65,15 @@ func (h *SubscriberHandler) Create(c *gin.Context) {
 			}
 			sub.Channels.MSTeams = model.MSTeamsConfig{WebhookURL: req.Channels.MSTeams.WebhookURL}
 		}
+		if req.Channels.Telegram != nil {
+			if id := req.Channels.Telegram.ChatID; id != "" {
+				if err := provider.ValidateTelegramChatID(id); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "VALIDATION_ERROR", "message": "channels.telegram.chatId: " + err.Error()}})
+					return
+				}
+			}
+			sub.Channels.Telegram = model.TelegramConfig{ChatID: req.Channels.Telegram.ChatID}
+		}
 	}
 	// Locale is deliberately not defaulted here. This is an upsert: forcing "en"
 	// on a payload that omits locale would stomp the stored value every time the

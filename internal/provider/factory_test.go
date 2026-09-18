@@ -85,7 +85,7 @@ func TestProviderFactory_RegisterCustom(t *testing.T) {
 
 func TestProviderFactory_AllDefaultsRegistered(t *testing.T) {
 	f := NewProviderFactory()
-	expected := []string{"log", "sendgrid", "ses", "smtp", "twilio", "vonage", "fcm", "apns", "slack_webhook", "ms_teams_webhook"}
+	expected := []string{"log", "sendgrid", "ses", "smtp", "twilio", "vonage", "fcm", "apns", "slack_webhook", "ms_teams_webhook", "telegram_bot"}
 	for _, id := range expected {
 		_, ok := f.builders[id]
 		assert.True(t, ok, "provider %q should be registered", id)

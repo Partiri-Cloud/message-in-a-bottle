@@ -99,7 +99,7 @@ Each channel type uses different template fields:
 | `sms` | `content` (plain text) |
 | `push` | `subject` + `body` |
 | `in_app` | `subject` + `content` |
-| `chat` (Slack/Teams) | `content` |
+| `slack`, `ms_teams`, `telegram` | `content` |
 
 ### Localization
 

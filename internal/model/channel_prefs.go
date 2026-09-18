@@ -5,7 +5,7 @@ package model
 // Every enumeration of the channels — masking, DTO conversion, partial $set
 // updates, delivery lookups — is driven by this one table, so adding a channel
 // means adding a field to ChannelPrefs and a row here, and nothing else. The
-// previous arrangement hand-listed the six channels in half a dozen places, all
+// previous arrangement hand-listed the channels in half a dozen places, all
 // of which compiled cleanly while silently leaving a new channel false.
 //
 // name is the delivery-side name a notification step carries ("in_app"),
@@ -22,6 +22,7 @@ var channelFields = []struct {
 	{"in_app", "inApp", func(p *ChannelPrefs) *bool { return &p.InApp }},
 	{"slack", "slack", func(p *ChannelPrefs) *bool { return &p.Slack }},
 	{"ms_teams", "msTeams", func(p *ChannelPrefs) *bool { return &p.MSTeams }},
+	{"telegram", "telegram", func(p *ChannelPrefs) *bool { return &p.Telegram }},
 }
 
 // ChannelNames returns every delivery-side channel name, in declaration order.

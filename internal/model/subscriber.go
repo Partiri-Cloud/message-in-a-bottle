@@ -26,9 +26,10 @@ type Subscriber struct {
 }
 
 type SubscriberChannels struct {
-	Push    PushChannelConfig `bson:"push,omitempty"    json:"push"`
-	Slack   SlackConfig       `bson:"slack,omitempty"   json:"slack"`
-	MSTeams MSTeamsConfig     `bson:"msTeams,omitempty" json:"msTeams"`
+	Push     PushChannelConfig `bson:"push,omitempty"     json:"push"`
+	Slack    SlackConfig       `bson:"slack,omitempty"    json:"slack"`
+	MSTeams  MSTeamsConfig     `bson:"msTeams,omitempty"  json:"msTeams"`
+	Telegram TelegramConfig    `bson:"telegram,omitempty" json:"telegram"`
 }
 
 type PushChannelConfig struct {
@@ -42,4 +43,11 @@ type SlackConfig struct {
 
 type MSTeamsConfig struct {
 	WebhookURL string `bson:"webhookUrl,omitempty" json:"webhookUrl,omitempty"`
+}
+
+// TelegramConfig holds the chat a Telegram bot delivers to: a numeric chat ID
+// (negative for groups) or a public channel's "@username". A bot cannot start a
+// conversation, so the integrator obtains the ID after the user presses Start.
+type TelegramConfig struct {
+	ChatID string `bson:"chatId,omitempty" json:"chatId,omitempty"`
 }

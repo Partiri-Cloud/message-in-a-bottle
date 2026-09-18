@@ -236,6 +236,11 @@ func recipientForChannel(sub *model.Subscriber, channel string) (string, error) 
 			return "", fmt.Errorf("subscriber has no ms_teams webhook configured")
 		}
 		return sub.Channels.MSTeams.WebhookURL, nil
+	case "telegram":
+		if sub.Channels.Telegram.ChatID == "" {
+			return "", fmt.Errorf("subscriber has no telegram chat id configured")
+		}
+		return sub.Channels.Telegram.ChatID, nil
 	default:
 		return "", fmt.Errorf("unsupported transactional channel %q", channel)
 	}
@@ -625,6 +630,8 @@ func (h *DeliveryHandler) buildSendOptions(sub *model.Subscriber, step model.Wor
 		opts.To = sub.Channels.Slack.WebhookURL
 	case "ms_teams":
 		opts.To = sub.Channels.MSTeams.WebhookURL
+	case "telegram":
+		opts.To = sub.Channels.Telegram.ChatID
 	}
 
 	return opts

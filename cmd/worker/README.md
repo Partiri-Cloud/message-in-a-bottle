@@ -48,6 +48,7 @@ Failed deliveries retry with exponential backoff (30s base, 4x multiplier, max 3
 | in_app    | 200           | 60 min |
 | slack     | 30            | 60 min |
 | ms_teams  | 30            | 60 min |
+| telegram  | 30            | 60 min |
 
 ### Not used by this service
 

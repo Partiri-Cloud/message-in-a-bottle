@@ -117,3 +117,27 @@ func TestSubscriberCreate_RepostResponseReportsStoredState(t *testing.T) {
 	assert.NotEqual(t, bson.NilObjectID.Hex(), body.Data.ID, "must not report a zero id for an existing subscriber")
 	assert.Equal(t, "de", body.Data.Locale, "must report the stored locale, not the blank one that was sent")
 }
+
+func TestSubscriberCreate_StoresTelegramChatIDWithoutWipingOtherChannels(t *testing.T) {
+	router, repo, envID := setupSubscriberRouter(t)
+
+	require.Equal(t, http.StatusCreated, postJSON(t, router, "/subscribers",
+		`{"subscriberId":"usr_tg","channels":{"push":{"fcmTokens":["tok-a"]},"slack":{"webhookUrl":"https://hooks.slack.com/services/T0/B0/X"}}}`).Code)
+
+	require.Equal(t, http.StatusCreated, postJSON(t, router, "/subscribers",
+		`{"subscriberId":"usr_tg","channels":{"telegram":{"chatId":"-1001234567890"}}}`).Code)
+
+	found, err := repo.FindBySubscriberID(context.Background(), envID, "usr_tg")
+	require.NoError(t, err)
+	assert.Equal(t, "-1001234567890", found.Channels.Telegram.ChatID)
+	assert.Equal(t, []string{"tok-a"}, found.Channels.Push.FCMTokens, "push tokens must survive a telegram-only upsert")
+	assert.Equal(t, "https://hooks.slack.com/services/T0/B0/X", found.Channels.Slack.WebhookURL)
+}
+
+func TestSubscriberCreate_RejectsInvalidTelegramChatID(t *testing.T) {
+	router, _, _ := setupSubscriberRouter(t)
+
+	w := postJSON(t, router, "/subscribers", `{"subscriberId":"usr_tg2","channels":{"telegram":{"chatId":"not a chat"}}}`)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "channels.telegram.chatId")
+}

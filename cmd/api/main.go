@@ -51,6 +51,11 @@ func main() {
 	if err := repository.EnsureIndexes(ctx, db); err != nil {
 		logger.Warn("failed to ensure indexes", slog.Any("error", err))
 	}
+	if n, err := repository.NewPreferenceRepository(db).BackfillGlobalChannels(ctx); err != nil {
+		logger.Warn("failed to backfill global preference channels", slog.Any("error", err))
+	} else if n > 0 {
+		logger.Info("backfilled global preference channels", slog.Int64("rows", n))
+	}
 
 	// Redis
 	rdb := redis.NewClient(&redis.Options{

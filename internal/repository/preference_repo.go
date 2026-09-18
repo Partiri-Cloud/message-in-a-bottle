@@ -165,3 +165,28 @@ func (r *PreferenceRepository) FindBySubscriberAndWorkflow(ctx context.Context, 
 	}
 	return &pref, nil
 }
+
+// BackfillGlobalChannels sets every channel missing from a stored global row to
+// true, and reports how many rows it touched.
+//
+// A global row is an opt-out mask, and its channels are seeded only when the row
+// is inserted. A channel added to the model after that is absent from the stored
+// document, decodes as false, and — ANDed into every workflow's defaults — would
+// silently opt the subscriber out of a channel they never saw. Absent means "never
+// opted out", which in a mask is true. Idempotent; run at startup.
+func (r *PreferenceRepository) BackfillGlobalChannels(ctx context.Context) (int64, error) {
+	var total int64
+	for _, channel := range model.ChannelNames() {
+		field, _ := model.ChannelBSONField(channel)
+		path := "channels." + field
+		res, err := r.col.UpdateMany(ctx,
+			bson.M{"workflowId": nil, path: bson.M{"$exists": false}},
+			bson.M{"$set": bson.M{path: true}},
+		)
+		if err != nil {
+			return total, err
+		}
+		total += res.ModifiedCount
+	}
+	return total, nil
+}

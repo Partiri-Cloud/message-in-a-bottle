@@ -43,12 +43,13 @@ type StepConditionDTO struct {
 }
 
 type ChannelPrefsDTO struct {
-	Email   bool `json:"email"`
-	SMS     bool `json:"sms"`
-	Push    bool `json:"push"`
-	InApp   bool `json:"inApp"`
-	Slack   bool `json:"slack"`
-	MSTeams bool `json:"msTeams"`
+	Email    bool `json:"email"`
+	SMS      bool `json:"sms"`
+	Push     bool `json:"push"`
+	InApp    bool `json:"inApp"`
+	Slack    bool `json:"slack"`
+	MSTeams  bool `json:"msTeams"`
+	Telegram bool `json:"telegram"`
 }
 
 type WorkflowStatusRequest struct {

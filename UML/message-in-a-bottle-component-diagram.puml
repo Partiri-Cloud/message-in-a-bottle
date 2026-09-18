@@ -1,0 +1,131 @@
+@startuml
+skinparam componentStyle uml2
+skinparam linetype polyline
+left to right direction
+skinparam nodesep 12
+skinparam ranksep 40
+skinparam shadowing false
+skinparam interface {
+  BackgroundColor White
+}
+
+title message-in-a-bottle — UML component diagram (derived from source, cmd/* + internal/*)
+
+' ================= External clients =================
+actor "Operator" as Op
+component "Tenant backend" as Tenant <<external>>
+component "Browser / SDK client\n(packages/sdk)" as SDK <<external>>
+
+' ================= API server =================
+package "miab-api (cmd/api)" as APIPkg {
+  component "Gin Router + Handlers" as Router
+  component "TriggerService" as TrigSvc
+  component "TemplateService" as TmplSvc
+  component "AnnouncementHandler" as Ann
+}
+
+interface "REST /api/v1\nHTTP :API_PORT\nAuthorization: ApiKey" as IRest
+interface "REST /admin\nAuthorization: AdminSecret" as IAdmin
+
+IRest -- Router
+IAdmin -- Router
+Tenant --( IRest
+SDK --( IRest
+Op ..> IAdmin : uses
+
+Router ..> TrigSvc
+Router ..> TmplSvc
+Router ..> Ann
+
+' ================= WebSocket server =================
+package "miab-ws (cmd/ws)" as WSPkg {
+  component "/ws accept + auth" as WsEp
+  component "Hub" as Hub
+  component "Client + Presence" as WsClient
+}
+
+interface "WebSocket /ws\nHTTP :WS_PORT\nfirst-message auth: apiKey +\nHMAC subscriberToken" as IWs
+
+IWs -- WsEp
+SDK --( IWs
+WsEp ..> Hub
+WsEp ..> WsClient
+
+' ================= Worker =================
+package "miab-worker (cmd/worker)" as WKPkg {
+  component "Asynq server\nqueues: critical / default / low" as AsynqSrv
+  component "Trigger / Broadcast /\nDelay / Digest handlers" as FlowHandlers
+  component "DeliveryHandler" as Delivery
+  component "ProviderFactory" as Factory
+}
+
+AsynqSrv ..> FlowHandlers
+AsynqSrv ..> Delivery
+Delivery ..> Factory
+
+' ================= Redis =================
+database "Redis" as Redis
+
+interface "Asynq task queues\ntask:trigger / task:delivery /\ntask:delay / task:digest / task:broadcast" as IQueue
+interface "Pub/Sub channel\nws:notifications" as IPubSub
+interface "KV: miab:announcement:*\n+ digest lists" as IKV
+
+IQueue -- Redis
+IPubSub -- Redis
+IKV -- Redis
+
+APIPkg --( IQueue : enqueue trigger /\nbroadcast / delivery
+WKPkg --( IQueue : consume + re-enqueue\n+ retry backoff
+APIPkg --( IKV : announcements
+WKPkg --( IKV : digest lists
+WKPkg --( IPubSub : publish in_app
+WSPkg --( IPubSub : subscribe
+
+' ================= MongoDB =================
+database "MongoDB" as Mongo
+
+interface "MongoDB wire protocol\ndb: MONGO_DB" as IMongo
+IMongo -- Mongo
+
+APIPkg --( IMongo : repositories
+WSPkg --( IMongo : auth + feed + presence
+WKPkg --( IMongo : integrations + status
+
+' ================= External delivery providers =================
+package "External delivery providers" as ProvPkg {
+  component "SendGrid" as SendGrid <<external>>
+  component "AWS SES" as SES <<external>>
+  component "SMTP server" as SMTP <<external>>
+  component "Twilio" as Twilio <<external>>
+  component "Vonage" as Vonage <<external>>
+  component "FCM" as FCM <<external>>
+  component "APNs" as APNs <<external>>
+  component "Slack" as Slack <<external>>
+  component "MS Teams" as Teams <<external>>
+  component "Telegram" as Telegram <<external>>
+}
+
+interface "Email delivery\nSendGrid v3 API / SES API / SMTP" as IEmail
+interface "SMS delivery\nTwilio REST / Vonage REST" as ISms
+interface "Push delivery\nFCM / APNs HTTP2" as IPush
+interface "Incoming webhooks\nhooks.slack.com /\n*.webhook.office.com" as IChat
+interface "Telegram Bot API\napi.telegram.org" as ITelegram
+
+IEmail -- SendGrid
+IEmail -- SES
+IEmail -- SMTP
+ISms -- Twilio
+ISms -- Vonage
+IPush -- FCM
+IPush -- APNs
+IChat -- Slack
+IChat -- Teams
+ITelegram -- Telegram
+
+Factory --( IEmail
+Factory --( ISms
+Factory --( IPush
+Factory --( IChat
+Factory --( ITelegram
+
+@enduml

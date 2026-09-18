@@ -56,7 +56,7 @@ func TestSubscriberSerializesCamelCase(t *testing.T) {
 func TestChannelPrefsSerializesCamelCase(t *testing.T) {
 	keys := keysOf(t, ChannelPrefs{})
 
-	for _, k := range []string{"email", "sms", "push", "inApp", "slack", "msTeams"} {
+	for _, k := range []string{"email", "sms", "push", "inApp", "slack", "msTeams", "telegram"} {
 		assert.Contains(t, keys, k)
 	}
 }
