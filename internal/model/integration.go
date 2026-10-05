@@ -69,3 +69,7 @@ type APNSCreds struct {
 	PrivateKey string `json:"privateKey"`
 	BundleID   string `json:"bundleId"`
 }
+
+type TelegramCreds struct {
+	BotToken string `json:"botToken"`
+}

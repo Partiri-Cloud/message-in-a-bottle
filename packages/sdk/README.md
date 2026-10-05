@@ -94,18 +94,24 @@ const { count } = await client.notifications.unseenCount();
 ### Preferences
 
 ```typescript
-// Get all preferences
+// Effective settings for every active workflow, plus the global preference
 const prefs = await client.preferences.list();
 
-// Update global channel preferences
+// Which channels this environment can actually deliver on — hide or disable
+// toggles for the rest, since enabling them would never deliver anything
+const available = await client.preferences.availableChannels();
+// { email: true, sms: false, push: true, inApp: true, slack: false, msTeams: false, telegram: true }
+
+// Update global channel preferences (an opt-out mask: it can silence a channel,
+// never enable one a workflow has off). Unlisted channels are left untouched.
 await client.preferences.update({
-  channels: { email: true, sms: false, push: true, inApp: true },
+  channels: { sms: false },
 });
 
 // Update workflow-specific preferences
 await client.preferences.update({
-  workflowId: 'workflow-id',
-  channels: { email: false },
+  workflowIdentifier: 'deploy-failed',
+  channels: { email: false, telegram: true },
 });
 ```
 

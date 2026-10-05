@@ -1,6 +1,6 @@
 {
   "name": "@partiri-cloud/message-in-a-bottle-sdk",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "Framework-agnostic notification SDK for message-in-a-bottle",
   "license": "MIT",
   "repository": {
@@ -34,7 +34,7 @@
   "devDependencies": {
     "tsup": "^8.0.0",
     "typescript": "^5.7.0",
-    "vitest": "^4.1.2"
+    "vitest": "^4.1.11"
   },
   "overrides": {
     "esbuild": "^0.28.1"

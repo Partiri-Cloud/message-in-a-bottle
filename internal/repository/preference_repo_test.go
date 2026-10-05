@@ -171,3 +171,40 @@ func TestPreferenceRepo_UpdateChannels_ConcurrentUpdatesToDifferentChannelsBothL
 	assert.False(t, prefs[0].Channels.SMS, "and vice versa")
 	assert.True(t, prefs[0].Channels.Push, "a channel neither request named is untouched")
 }
+
+// A global row stored before a channel existed lacks that channel. Decoded as
+// false it would mask the channel off for the subscriber; the backfill restores
+// "never opted out" and leaves real opt-outs and workflow rows alone.
+func TestPreferenceRepo_BackfillGlobalChannels(t *testing.T) {
+	db, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	envID, _ := testutil.SeedEnvironmentDoc(t, db, "test-env")
+	repo := NewPreferenceRepository(db)
+	col := db.Collection("subscriber_preferences")
+	wfID := bson.NewObjectID()
+
+	legacy := bson.M{"email": true, "sms": false, "push": true, "inApp": true, "slack": true, "msTeams": true}
+	_, err := col.InsertOne(ctx, bson.M{"environmentId": envID, "subscriberId": bson.NewObjectID(), "workflowId": nil, "channels": legacy})
+	require.NoError(t, err)
+	_, err = col.InsertOne(ctx, bson.M{"environmentId": envID, "subscriberId": bson.NewObjectID(), "workflowId": wfID, "channels": legacy})
+	require.NoError(t, err)
+
+	n, err := repo.BackfillGlobalChannels(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), n, "only the global row is touched")
+
+	var global model.SubscriberPreference
+	require.NoError(t, col.FindOne(ctx, bson.M{"workflowId": nil}).Decode(&global))
+	assert.True(t, global.Channels.Telegram, "a channel the row predates is not opted out")
+	assert.False(t, global.Channels.SMS, "an existing opt-out is kept")
+
+	var wf bson.M
+	require.NoError(t, col.FindOne(ctx, bson.M{"workflowId": wfID}).Decode(&wf))
+	assert.NotContains(t, wf["channels"], "telegram", "workflow rows are left alone")
+
+	n, err = repo.BackfillGlobalChannels(ctx)
+	require.NoError(t, err)
+	assert.Zero(t, n, "idempotent")
+}

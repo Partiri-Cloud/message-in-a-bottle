@@ -444,6 +444,7 @@ Provider credentials are configured at runtime via the REST API, **not** environ
 |--------|------|-------------|
 | `POST` | `/api/v1/integrations` | Create a new integration |
 | `GET` | `/api/v1/integrations` | List all integrations |
+| `GET` | `/api/v1/integrations/:id` | Get one integration (credentials are never returned) |
 | `PUT` | `/api/v1/integrations/:id` | Update an integration |
 | `DELETE` | `/api/v1/integrations/:id` | Delete an integration |
 | `PATCH` | `/api/v1/integrations/:id/primary` | Set as primary for its channel |
@@ -661,14 +662,14 @@ curl -X POST http://localhost:3000/api/v1/integrations \
 
 #### Slack (Incoming Webhook)
 
-Slack integrations use webhook URLs. The webhook URL is passed as the subscriber's contact address (the `To` field), not stored as a credential.
+Slack integrations use incoming webhook URLs. The webhook URL belongs to the subscriber (`channels.slack.webhookUrl`), not to the integration, so the integration carries no credentials.
 
 ```bash
 curl -X POST http://localhost:3000/api/v1/integrations \
   -H "Authorization: ApiKey <your-key>" \
   -H "Content-Type: application/json" \
   -d '{
-    "channel": "chat",
+    "channel": "slack",
     "providerId": "slack_webhook",
     "name": "Slack",
     "credentials": {},
@@ -676,27 +677,58 @@ curl -X POST http://localhost:3000/api/v1/integrations \
   }'
 ```
 
-When triggering a notification, set the subscriber's Slack contact to the webhook URL:
-```
-https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXX
+Store each subscriber's webhook URL on the subscriber:
+```json
+{ "subscriberId": "user-123", "channels": { "slack": { "webhookUrl": "https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXX" } } }
 ```
 
 #### Microsoft Teams (Incoming Webhook)
 
-Same pattern as Slack -- the webhook URL is the subscriber's contact address.
+Same pattern as Slack -- the webhook URL is stored on the subscriber as `channels.msTeams.webhookUrl`.
 
 ```bash
 curl -X POST http://localhost:3000/api/v1/integrations \
   -H "Authorization: ApiKey <your-key>" \
   -H "Content-Type: application/json" \
   -d '{
-    "channel": "chat",
+    "channel": "ms_teams",
     "providerId": "ms_teams_webhook",
     "name": "MS Teams",
     "credentials": {},
     "isPrimary": true
   }'
 ```
+
+#### Telegram (Bot API)
+
+Messages are sent by a Telegram bot you own. The bot token is the integration's credential; each subscriber carries the chat the bot delivers to.
+
+1. Create a bot with [@BotFather](https://t.me/BotFather) (`/newbot`) and copy its token.
+2. Create the integration:
+
+```bash
+curl -X POST http://localhost:3000/api/v1/integrations \
+  -H "Authorization: ApiKey <your-key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "channel": "telegram",
+    "providerId": "telegram_bot",
+    "name": "Telegram",
+    "credentials": { "botToken": "123456789:AAE..." },
+    "isPrimary": true
+  }'
+```
+
+3. Get each subscriber's chat ID. A bot cannot start a conversation: the user must open your bot and press **Start** (or add it to a group) first. Your application then reads the chat ID from the update Telegram sends -- via your own bot webhook, or `https://api.telegram.org/bot<token>/getUpdates` while testing (`message.chat.id`). Message in a Bottle does not do this linking step for you.
+4. Store the chat ID on the subscriber, as a string:
+
+```json
+{ "subscriberId": "user-123", "channels": { "telegram": { "chatId": "123456789" } } }
+```
+
+A chat ID is numeric (negative for groups, e.g. `"-1001234567890"`) or a public channel's `"@username"` (the bot must be an admin of the channel). Anything else is rejected with `400`.
+
+Messages are sent as plain text from the step's `content` template; `subject` is ignored. Text longer than Telegram's 4096-character limit is truncated and ends with `…`. If the user blocks the bot, delivery fails with Telegram's error (`Forbidden: bot was blocked by the user`) in the activity log.
 
 ### Debug Provider
 
@@ -728,8 +760,9 @@ curl -X POST http://localhost:3000/api/v1/integrations \
 | Vonage | `sms` | `vonage` | `apiKey`, `apiSecret`, `fromNumber` |
 | FCM | `push` | `fcm` | `serviceAccountJson` |
 | APNS | `push` | `apns` | `keyId`, `teamId`, `privateKey`, `bundleId` |
-| Slack | `chat` | `slack_webhook` | *(empty -- webhook URL is the subscriber contact)* |
-| MS Teams | `chat` | `ms_teams_webhook` | *(empty -- webhook URL is the subscriber contact)* |
+| Slack | `slack` | `slack_webhook` | *(empty -- webhook URL is stored on the subscriber)* |
+| MS Teams | `ms_teams` | `ms_teams_webhook` | *(empty -- webhook URL is stored on the subscriber)* |
+| Telegram | `telegram` | `telegram_bot` | `botToken` |
 | Log | any | `log` | *(empty -- logs to stdout)* |
 
 ### Primary integrations
@@ -740,6 +773,37 @@ Each channel can have one primary integration. The worker uses the primary integ
 curl -X PATCH http://localhost:3000/api/v1/integrations/<id>/primary \
   -H "Authorization: ApiKey <your-key>"
 ```
+
+### Checking which channels can deliver
+
+A channel with no usable integration is not rejected: a subscriber can enable it and a workflow can trigger it, and the worker then marks the delivery `failed — no integration configured`. To stop a UI offering a toggle that can never deliver, ask the environment which channels it can actually send on:
+
+```bash
+curl http://localhost:3000/api/v1/channels \
+  -H "Authorization: ApiKey <your-key>"
+```
+
+```json
+{
+  "data": {
+    "email": true,
+    "sms": false,
+    "push": true,
+    "inApp": true,
+    "slack": false,
+    "msTeams": false,
+    "telegram": true
+  }
+}
+```
+
+The rules mirror delivery exactly:
+
+- `inApp` is always `true` -- it needs no integration.
+- `push` is `true` when any active push integration exists (FCM and APNS are used together).
+- Every other channel is `true` only when it has an active **primary** integration.
+
+The endpoint requires `preferences:read`, not `integrations:read`: it returns one boolean per channel and nothing about the integrations or their credentials, so it is safe for a browser-facing key. The SDK exposes it as `preferences.availableChannels()`.
 
 ---
 
@@ -776,7 +840,7 @@ Response (201):
 }
 ```
 
-You can also set phone numbers, push tokens, Slack/Teams webhook URLs, custom data, locale, and timezone. See the full subscriber schema:
+You can also set phone numbers, push tokens, Slack/Teams webhook URLs, Telegram chat IDs, custom data, locale, and timezone. See the full subscriber schema:
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -792,6 +856,7 @@ You can also set phone numbers, push tokens, Slack/Teams webhook URLs, custom da
 | `channels.push.apnsTokens` | string[] | Apple Push Notification device tokens. |
 | `channels.slack.webhookUrl` | string | Slack incoming webhook URL. |
 | `channels.msTeams.webhookUrl` | string | MS Teams incoming webhook URL. |
+| `channels.telegram.chatId` | string | Telegram chat ID (numeric, or a public channel `@username`). |
 
 ### Step 2: Create a workflow
 
@@ -839,7 +904,9 @@ Response (201):
 | `sms` | Send an SMS | `template` with `content` |
 | `push` | Send a push notification | `template` with `subject` and `body` |
 | `in_app` | Deliver to WebSocket feed | `template` with `subject` and `content` |
-| `chat` | Send to Slack/Teams | `template` with `content` |
+| `slack` | Send to Slack | `template` with `content` |
+| `ms_teams` | Send to MS Teams | `template` with `content` |
+| `telegram` | Send to Telegram | `template` with `content` |
 | `delay` | Pause before the next step | `delayConfig` with `amount` and `unit` (`seconds`, `minutes`, `hours`, `days`) |
 | `digest` | Batch notifications over a window | `digestConfig` with `amount`, `unit`, and `digestKey` |
 
@@ -1062,6 +1129,7 @@ The worker enforces per-channel rate limits to prevent abuse and respect provide
 | `in_app` | 200 | 60 min |
 | `slack` | 30 | 60 min |
 | `ms_teams` | 30 | 60 min |
+| `telegram` | 30 | 60 min |
 
 ### Overriding limits
 

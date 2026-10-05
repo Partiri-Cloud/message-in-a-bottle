@@ -55,7 +55,7 @@ export interface Notification {
 
 /** Delivery status for a single notification channel. */
 export interface ChannelDelivery {
-  /** Channel type (e.g. `email`, `sms`, `push`, `in_app`, `slack`, `ms_teams`). */
+  /** Channel type (e.g. `email`, `sms`, `push`, `in_app`, `slack`, `ms_teams`, `telegram`). */
   channel: string;
   /** Delivery status: `pending`, `sent`, `delivered`, `failed`, or `skipped`. */
   status: string;
@@ -116,6 +116,8 @@ export interface ChannelPreferences {
   slack?: boolean;
   /** Whether Microsoft Teams notifications are enabled. */
   msTeams?: boolean;
+  /** Whether Telegram notifications are enabled. */
+  telegram?: boolean;
 }
 
 /**
@@ -150,7 +152,7 @@ export interface PreferenceUpdate {
 /**
  * The effective state of every channel. Unlike {@link ChannelPreferences}, whose
  * fields are optional because a *request* may name only the channels it changes,
- * a response always carries all six — the server resolves them.
+ * a response always carries every channel — the server resolves them.
  */
 export interface ResolvedChannels {
   email: boolean;
@@ -159,6 +161,7 @@ export interface ResolvedChannels {
   inApp: boolean;
   slack: boolean;
   msTeams: boolean;
+  telegram: boolean;
 }
 
 /**
@@ -175,7 +178,7 @@ export interface Preference {
   workflowId?: string | null;
   /** Workflow identifier (e.g. `deploy-started`), or `null` for the global preference. */
   workflowIdentifier?: string | null;
-  /** The effective channel settings for this workflow. Always all six. */
+  /** The effective channel settings for this workflow. Always every channel. */
   channels: ResolvedChannels;
   /**
    * Whether the subscriber has explicitly saved a choice here, as opposed to

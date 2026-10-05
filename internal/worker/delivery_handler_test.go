@@ -87,6 +87,19 @@ func TestRecipientForChannel_MSTeamsMissing(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestRecipientForChannel_Telegram(t *testing.T) {
+	sub := &model.Subscriber{Channels: model.SubscriberChannels{Telegram: model.TelegramConfig{ChatID: "-1001234567890"}}}
+	to, err := recipientForChannel(sub, "telegram")
+	assert.NoError(t, err)
+	assert.Equal(t, "-1001234567890", to)
+}
+
+func TestRecipientForChannel_TelegramMissing(t *testing.T) {
+	sub := &model.Subscriber{}
+	_, err := recipientForChannel(sub, "telegram")
+	assert.Error(t, err)
+}
+
 func TestRecipientForChannel_InAppUnsupported(t *testing.T) {
 	sub := &model.Subscriber{}
 	_, err := recipientForChannel(sub, "in_app")

@@ -14,9 +14,10 @@ type CreateSubscriberRequest struct {
 }
 
 type ChannelsDTO struct {
-	Push    *PushDTO    `json:"push"`
-	Slack   *SlackDTO   `json:"slack"`
-	MSTeams *MSTeamsDTO `json:"msTeams"`
+	Push     *PushDTO     `json:"push"`
+	Slack    *SlackDTO    `json:"slack"`
+	MSTeams  *MSTeamsDTO  `json:"msTeams"`
+	Telegram *TelegramDTO `json:"telegram"`
 }
 
 type PushDTO struct {
@@ -44,6 +45,12 @@ type SlackDTO struct {
 // before being stored. Omitting the field (empty string) disables the channel.
 type MSTeamsDTO struct {
 	WebhookURL string `json:"webhookUrl"`
+}
+
+// TelegramDTO carries the Telegram chat a subscriber receives messages in.
+// Non-empty values are validated in subscriber_handler.go before being stored.
+type TelegramDTO struct {
+	ChatID string `json:"chatId"`
 }
 
 type UpdateSubscriberRequest struct {

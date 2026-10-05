@@ -24,20 +24,20 @@ describe('PreferencesModule', () => {
   });
 
   it('list returns the data array from the response', async () => {
-    // The wire shape the API actually sends: effective channels (all six),
+    // The wire shape the API actually sends: effective channels (every channel),
     // an `explicit` flag, and a global row with null identifiers.
     const mockPrefs = [
       {
         workflowId: null,
         workflowIdentifier: null,
-        channels: { email: true, sms: false, push: true, inApp: true, slack: true, msTeams: true },
+        channels: { email: true, sms: false, push: true, inApp: true, slack: true, msTeams: true, telegram: false },
         explicit: true,
         updatedAt: '2026-01-01T00:00:00Z',
       },
       {
         workflowId: '65f0c0ffee0000000000dead',
         workflowIdentifier: 'deploy-started',
-        channels: { email: false, sms: false, push: false, inApp: true, slack: false, msTeams: false },
+        channels: { email: false, sms: false, push: false, inApp: true, slack: false, msTeams: false, telegram: false },
         explicit: false,
         updatedAt: null,
       },

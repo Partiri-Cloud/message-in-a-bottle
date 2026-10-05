@@ -33,7 +33,7 @@ Clients (SDK / HTTP)
 
 ### Notification channels
 
-Email (SendGrid, SES, SMTP), SMS (Twilio, Vonage), Push (FCM, APNS), Chat (Slack, MS Teams), In-App (WebSocket).
+Email (SendGrid, SES, SMTP), SMS (Twilio, Vonage), Push (FCM, APNS), Chat (Slack, MS Teams, Telegram), In-App (WebSocket).
 
 ### Workflow engine
 
@@ -218,6 +218,7 @@ All three need `MONGO_URI`, `MONGO_DB`, `REDIS_ADDR`, and `REDIS_PASSWORD` to re
 | in_app    | 200           | 60 min   |
 | slack     | 30            | 60 min   |
 | ms_teams  | 30            | 60 min   |
+| telegram  | 30            | 60 min   |
 
 ## API authentication
 

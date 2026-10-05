@@ -106,6 +106,7 @@ func defaultRateLimits() map[string]RateLimitChannelConfig {
 		"in_app":   {MaxPerWindow: 200, WindowMinutes: 60},
 		"slack":    {MaxPerWindow: 30, WindowMinutes: 60},
 		"ms_teams": {MaxPerWindow: 30, WindowMinutes: 60},
+		"telegram": {MaxPerWindow: 30, WindowMinutes: 60},
 	}
 }
 

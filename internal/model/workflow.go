@@ -55,10 +55,11 @@ type StepCondition struct {
 }
 
 type ChannelPrefs struct {
-	Email   bool `bson:"email"   json:"email"`
-	SMS     bool `bson:"sms"     json:"sms"`
-	Push    bool `bson:"push"    json:"push"`
-	InApp   bool `bson:"inApp"   json:"inApp"`
-	Slack   bool `bson:"slack"   json:"slack"`
-	MSTeams bool `bson:"msTeams" json:"msTeams"`
+	Email    bool `bson:"email"    json:"email"`
+	SMS      bool `bson:"sms"      json:"sms"`
+	Push     bool `bson:"push"     json:"push"`
+	InApp    bool `bson:"inApp"    json:"inApp"`
+	Slack    bool `bson:"slack"    json:"slack"`
+	MSTeams  bool `bson:"msTeams"  json:"msTeams"`
+	Telegram bool `bson:"telegram" json:"telegram"`
 }
